@@ -2,23 +2,33 @@
 
 Pipeline:
     1. receive the claim;
-    2. identify country context + search terms (LLM, with heuristic fallback);
-    3. query the relevant government connectors concurrently;
+    2. identify country, knowledge areas and search terms (LLM, with deterministic fallback);
+    3. query the relevant primary-source connectors concurrently;
     4. build the evidence-grounded prompt;
     5. run the analysis through the request's BYOK provider;
     6. return a structured, auditable report.
+
+Citizen mode (zero cost): without an AI provider - or when the provider fails (missing/invalid
+key, exhausted free-tier quota, offline) - steps 4-5 are skipped and the report carries the raw
+official evidence with verdict ``SEM_CHAVE_IA_DADOS_BRUTOS``. The user is never blocked.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import re
-import unicodedata
 from collections.abc import Sequence
 
 from app.connectors.base import BaseGovConnector
-from app.core.errors import ConnectorError, ProviderOutputError
+from app.core.errors import (
+    ConnectorError,
+    ProviderAuthenticationError,
+    ProviderConfigurationError,
+    ProviderOutputError,
+    ProviderRateLimitError,
+    ProviderUnavailableError,
+    VeritasError,
+)
 from app.engines.base import BaseLLMProvider
 from app.engines.prompt_templates.fact_check import (
     CLAIM_ANALYSIS_SYSTEM,
@@ -26,7 +36,7 @@ from app.engines.prompt_templates.fact_check import (
     build_claim_analysis_prompt,
     build_verdict_prompt,
 )
-from app.schemas.evidence import Evidence, EvidenceQuery
+from app.schemas.evidence import DEFAULT_DOMAINS, Country, Domain, Evidence, EvidenceQuery
 from app.schemas.fact_check import (
     ASSERTIVE_VERDICTS,
     ClaimAnalysis,
@@ -37,11 +47,25 @@ from app.schemas.fact_check import (
     SourceReference,
     Verdict,
 )
+from app.services.claim_heuristics import enrich_analysis, heuristic_analysis
 
 logger = logging.getLogger(__name__)
 
 #: Upper bound for confidence when the verdict had to be downgraded for lack of citations.
 DOWNGRADED_CONFIDENCE_CAP = 0.5
+#: Provider failures that switch the request to citizen mode instead of returning an error.
+AI_FAILURES = (
+    ProviderConfigurationError,
+    ProviderAuthenticationError,
+    ProviderRateLimitError,
+    ProviderUnavailableError,
+    ProviderOutputError,
+)
+FREE_KEYS_HINT = (
+    "Para receber um veredito explicado por IA sem pagar nada: crie uma chave gratuita do "
+    "Google Gemini em https://aistudio.google.com/apikey ou do Groq em "
+    "https://console.groq.com/keys (sem cartão de crédito), ou use um modelo local com Ollama."
+)
 
 
 class FactCheckService:
@@ -59,29 +83,43 @@ class FactCheckService:
     async def check_text(
         self,
         claim: str,
-        llm: BaseLLMProvider,
+        llm: BaseLLMProvider | None,
         country_override: CountryContext | None = None,
+        *,
+        notes: list[str] | None = None,
     ) -> FactCheckReport:
-        notes: list[str] = []
+        notes = list(notes or [])
 
         # 2. context + search terms
-        analysis = await self._analyze_claim(claim, llm, notes)
+        if llm is None:
+            analysis = heuristic_analysis(claim)
+        else:
+            try:
+                analysis = await self._analyze_claim(claim, llm, notes)
+            except AI_FAILURES as exc:
+                notes.append(_ai_failure_note(exc))
+                llm, analysis = None, heuristic_analysis(claim)
         if country_override is not None:
             analysis.country = country_override
-        if not analysis.keywords:
-            analysis.keywords = heuristic_keywords(claim)
+        analysis = enrich_analysis(analysis, claim)
 
         # 3. evidence retrieval
         evidence, queried, failures = await self.collect_evidence(analysis)
         numbered = [(f"E{i}", item) for i, item in enumerate(evidence, start=1)]
+        if llm is None:
+            return self._citizen_report(claim, analysis, numbered, queried, failures, notes)
 
         # 4 + 5. grounded verdict
-        llm_verdict = await llm.generate_structured(
-            build_verdict_prompt(claim, numbered, analysis.language),
-            LLMVerdict,
-            system_instruction=VERDICT_SYSTEM,
-            temperature=0.0,
-        )
+        try:
+            llm_verdict = await llm.generate_structured(
+                build_verdict_prompt(claim, numbered, analysis.language),
+                LLMVerdict,
+                system_instruction=VERDICT_SYSTEM,
+                temperature=0.0,
+            )
+        except AI_FAILURES as exc:
+            notes.append(_ai_failure_note(exc))
+            return self._citizen_report(claim, analysis, numbered, queried, failures, notes)
 
         # 6. auditable report (only sources actually retrieved can appear)
         known_ids = {eid for eid, _ in numbered}
@@ -100,22 +138,8 @@ class FactCheckService:
             )
             verdict, confidence = downgraded, min(confidence, DOWNGRADED_CONFIDENCE_CAP)
 
-        sources = [
-            SourceReference(
-                evidence_id=eid,
-                title=item.title,
-                url=item.url,
-                publisher=item.publisher,
-                connector=item.connector,
-                country=item.country,
-                excerpt=item.excerpt,
-                retrieved_at=item.retrieved_at,
-                cited=eid in cited,
-            )
-            for eid, item in numbered
-        ]
+        sources = _source_refs(numbered, cited)
         sources.sort(key=lambda s: not s.cited)  # cited sources first, stable otherwise
-
         return FactCheckReport(
             claim=claim,
             verdict=verdict,
@@ -123,9 +147,11 @@ class FactCheckService:
             primary_sources=sources,
             explanation=llm_verdict.explanation,
             country_context=analysis.country,
+            domains=analysis.domains,
             keywords=analysis.keywords,
             connectors_queried=queried,
             connector_failures=failures,
+            ai_used=True,
             provider=llm.name.value,
             model=llm.model,
             notes=notes,
@@ -143,19 +169,36 @@ class FactCheckService:
                 temperature=0.0,
             )
         except ProviderOutputError:
-            # Auth / rate-limit errors propagate; only unusable *output* falls back.
-            notes.append("Triagem por LLM falhou; usada detecção heurística de país/termos.")
+            # Unusable *output* only: the heuristics take over, the LLM still writes the verdict.
+            notes.append("Triagem por IA falhou; usada detecção heurística de país/termos.")
             return heuristic_analysis(claim)
+
+    def select_connectors(self, analysis: ClaimAnalysis) -> list[BaseGovConnector]:
+        scopes = {*analysis.country.countries(), Country.GLOBAL}
+        if Country.FR in scopes:
+            scopes.add(Country.EU)
+        domains = set(analysis.domains) or set(DEFAULT_DOMAINS)
+        if analysis.urls:
+            domains.add(Domain.WEB_HISTORY)
+        return [
+            c
+            for c in self.connectors
+            if c.enabled and c.country in scopes and (c.domains & domains)
+        ]
 
     async def collect_evidence(
         self, analysis: ClaimAnalysis
     ) -> tuple[list[Evidence], list[str], list[ConnectorFailure]]:
-        countries = analysis.country.countries()
-        selected = [c for c in self.connectors if c.country in countries]
+        selected = self.select_connectors(analysis)
         query = EvidenceQuery(
             keywords=analysis.keywords,
+            keywords_en=analysis.keywords_en,
             people=analysis.people,
             topics=analysis.topics,
+            topics_en=analysis.topics_en,
+            countries=sorted(c.value for c in analysis.country.countries()),
+            legal_references=analysis.legal_references,
+            urls=analysis.urls,
             max_results=self.max_results_per_connector,
         )
         results = await asyncio.gather(
@@ -164,7 +207,7 @@ class FactCheckService:
 
         evidence: list[Evidence] = []
         failures: list[ConnectorFailure] = []
-        seen_urls: set[str] = set()
+        seen: set[str] = set()
         for connector, result in zip(selected, results, strict=True):
             if isinstance(result, BaseException):
                 if not isinstance(result, Exception):
@@ -179,138 +222,84 @@ class FactCheckService:
                 continue
             for item in result:
                 key = f"{item.url}|{item.title}"
-                if key not in seen_urls:
-                    seen_urls.add(key)
+                if key not in seen:
+                    seen.add(key)
                     evidence.append(item)
         return evidence[: self.max_evidence], [c.source_id for c in selected], failures
 
-
-# ---------------------------------------------------------------------- heuristics
-_BR_MARKERS = (
-    "brasil",
-    "brasileir",
-    "camara dos deputados",
-    "senado federal",
-    "stf",
-    "ibge",
-    "sus",
-    "lula",
-    "bolsonaro",
-    "planalto",
-    "reais",
-    "r$",
-    "pib brasileiro",
-    "sao paulo",
-    "rio de janeiro",
-    "congresso nacional",
-    "governo federal",
-    "deputado",
-    "deputada",
-    "ministerio",
-)
-_FR_MARKERS = (
-    "france",
-    "francais",
-    "francaise",
-    "assemblee nationale",
-    "senat",
-    "insee",
-    "macron",
-    "elysee",
-    "matignon",
-    "paris",
-    "gouvernement",
-    "depute",
-    "ministere",
-    "loi ",
-)
-_PT_WORDS = {"nao", "que", "de", "do", "da", "os", "as", "um", "uma", "para", "com", "foi", "sao"}
-_FR_WORDS = {"le", "la", "les", "des", "est", "une", "pour", "avec", "pas", "ont", "sont", "du"}
-_STOPWORDS = (
-    _PT_WORDS
-    | _FR_WORDS
-    | {
-        "e",
-        "o",
-        "a",
-        "em",
-        "no",
-        "na",
-        "nos",
-        "por",
-        "mais",
-        "menos",
-        "sobre",
-        "ao",
-        "aos",
-        "seu",
-        "sua",
-        "et",
-        "en",
-        "au",
-        "aux",
-        "dans",
-        "sur",
-        "par",
-        "qui",
-        "ce",
-        "cette",
-        "il",
-        "elle",
-        "ser",
-        "ter",
-        "tem",
-        "teve",
-        "ja",
-        "isso",
-        "este",
-        "esta",
-        "entre",
-        "desde",
-        "ano",
-        "anos",
-    }
-)
+    # ------------------------------------------------------------------ citizen mode
+    def _citizen_report(
+        self,
+        claim: str,
+        analysis: ClaimAnalysis,
+        numbered: list[tuple[str, Evidence]],
+        queried: list[str],
+        failures: list[ConnectorFailure],
+        notes: list[str],
+    ) -> FactCheckReport:
+        notes.append(FREE_KEYS_HINT)
+        return FactCheckReport(
+            claim=claim,
+            verdict=Verdict.SEM_CHAVE_IA_DADOS_BRUTOS,
+            confidence_score=0.0,
+            primary_sources=_source_refs(numbered, cited=set()),
+            explanation=citizen_explanation(len(numbered), analysis.language),
+            country_context=analysis.country,
+            domains=analysis.domains,
+            keywords=analysis.keywords,
+            connectors_queried=queried,
+            connector_failures=failures,
+            ai_used=False,
+            provider="nenhum",
+            model="nenhum",
+            notes=notes,
+        )
 
 
-def _normalize(text: str) -> str:
-    stripped = unicodedata.normalize("NFKD", text.lower())
-    return "".join(c for c in stripped if not unicodedata.combining(c))
-
-
-def heuristic_country(claim: str) -> CountryContext:
-    text = _normalize(claim)
-    br = sum(marker in text for marker in _BR_MARKERS)
-    fr = sum(marker in text for marker in _FR_MARKERS)
-    if br and fr:
-        return CountryContext.AMBOS
-    if br or fr:
-        return CountryContext.BR if br else CountryContext.FR
-    words = set(re.findall(r"[a-z]+", text))
-    pt_hits, fr_hits = len(words & _PT_WORDS), len(words & _FR_WORDS)
-    if pt_hits > fr_hits:
-        return CountryContext.BR
-    if fr_hits > pt_hits:
-        return CountryContext.FR
-    return CountryContext.DESCONHECIDO
-
-
-def heuristic_keywords(claim: str, limit: int = 5) -> list[str]:
-    words = re.findall(r"[\wÀ-ÿ]+", claim.lower())
-    seen: list[str] = []
-    for word in words:
-        if len(word) < 4 or word.isdigit() or _normalize(word) in _STOPWORDS:
-            continue
-        if word not in seen:
-            seen.append(word)
-    return sorted(seen, key=len, reverse=True)[:limit]
-
-
-def heuristic_analysis(claim: str) -> ClaimAnalysis:
-    country = heuristic_country(claim)
-    return ClaimAnalysis(
-        country=country,
-        keywords=heuristic_keywords(claim),
-        topics=heuristic_keywords(claim),
-        language="fr" if country is CountryContext.FR else "pt",
+def citizen_explanation(count: int, language: str) -> str:
+    if language == "fr":
+        if not count:
+            return (
+                "Mode citoyen (sans IA) : aucune source officielle n'a été trouvée pour cette "
+                "affirmation. Essayez d'autres mots-clés ou ajoutez une clé d'IA gratuite."
+            )
+        return (
+            f"Mode citoyen (sans IA) : voici {count} source(s) officielle(s) trouvée(s). "
+            "Aucun verdict automatique n'a été produit : lisez les extraits et ouvrez les liens "
+            "officiels pour vérifier vous-même."
+        )
+    if not count:
+        return (
+            "Modo cidadão (sem IA): nenhuma fonte oficial foi encontrada para esta afirmação. "
+            "Tente outras palavras-chave ou adicione uma chave de IA gratuita."
+        )
+    return (
+        f"Modo cidadão (sem IA): encontramos {count} fonte(s) oficial(is) relacionada(s). "
+        "Nenhum veredito automático foi gerado: leia os trechos e abra os links oficiais "
+        "abaixo para conferir você mesmo."
     )
+
+
+def _ai_failure_note(exc: VeritasError) -> str:
+    return f"IA indisponível ({exc.message.rstrip('.')}). Exibindo os dados oficiais brutos."
+
+
+def _source_refs(numbered: list[tuple[str, Evidence]], cited: set[str]) -> list[SourceReference]:
+    return [
+        SourceReference(
+            evidence_id=eid,
+            title=item.title,
+            url=item.url,
+            publisher=item.publisher,
+            connector=item.connector,
+            country=item.country,
+            excerpt=item.excerpt,
+            authors=item.authors,
+            venue=item.venue,
+            published_at=item.published_at,
+            identifiers=item.identifiers,
+            retrieved_at=item.retrieved_at,
+            cited=eid in cited,
+        )
+        for eid, item in numbered
+    ]

@@ -6,8 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends
 
-from app.api.deps import get_fact_check_service, get_llm_provider
-from app.engines.base import BaseLLMProvider
+from app.api.deps import ProviderSelection, get_fact_check_service, get_optional_llm_provider
 from app.schemas.fact_check import FactCheckReport, TextFactCheckRequest
 from app.services.fact_checker import FactCheckService
 
@@ -26,8 +25,24 @@ REQUEST_EXAMPLES = {
         "summary": "BR · Câmara dos Deputados",
         "value": {"claim": "A Câmara aprovou a reforma tributária que cria o IBS e a CBS."},
     },
+    "saude_vacina": {
+        "summary": "Saúde · Vacinas e autismo (PubMed/OMS)",
+        "value": {"claim": "Vacinas causam autismo em crianças."},
+    },
+    "juridico_lei": {
+        "summary": "Jurídico · Marco Civil (Senado/STJ)",
+        "value": {"claim": "A Lei 12.965/2014 obriga provedores a guardar registros por 5 anos."},
+    },
+    "geopolitica": {
+        "summary": "Geopolítica · Cessar-fogo (GDELT)",
+        "value": {"claim": "A Ucrânia e a Rússia assinaram um cessar-fogo este mês."},
+    },
+    "web_arquivo": {
+        "summary": "Memória da web · Página alterada (Wayback)",
+        "value": {"claim": "A notícia em http://g1.globo.com foi apagada depois de publicada."},
+    },
     "fr_chomage": {
-        "summary": "FR · Desemprego (data.gouv.fr)",
+        "summary": "FR · Desemprego (data.gouv.fr/INSEE)",
         "value": {"claim": "Le taux de chômage en France a doublé depuis 2020.", "country": "FR"},
     },
 }
@@ -66,20 +81,19 @@ RESPONSE_EXAMPLE = {
     response_model=FactCheckReport,
     summary="Verifica uma alegação textual contra fontes oficiais (BR/FR)",
     description=(
-        "Antes de testar, clique em **Authorize** (cadeado) e informe `X-Provider` e `X-API-Key` "
-        "(ou só `X-Provider: ollama` para modelos locais). Escolha um exemplo pronto abaixo."
+        "**Funciona sem chave de IA** (modo cidadão): devolve as fontes oficiais encontradas com "
+        "o status `SEM_CHAVE_IA_DADOS_BRUTOS`. Para um veredito explicado, clique em "
+        "**Authorize** e informe uma chave gratuita do Gemini ou do Groq (ou `ollama`). "
+        "Se a chave falhar ou a cota gratuita acabar, a resposta volta ao modo cidadão em vez "
+        "de dar erro. Escolha um exemplo pronto abaixo."
     ),
-    responses={
-        200: {"content": {"application/json": {"example": RESPONSE_EXAMPLE}}},
-        400: {"description": "Configuração BYOK inválida ou ausente (ex.: faltou X-Provider)"},
-        401: {"description": "Chave rejeitada pelo provedor"},
-        429: {"description": "Limite de taxa do provedor"},
-        502: {"description": "Falha ou resposta inválida do provedor de IA"},
-    },
+    responses={200: {"content": {"application/json": {"example": RESPONSE_EXAMPLE}}}},
 )
 async def fact_check_text(
     body: Annotated[TextFactCheckRequest, Body(openapi_examples=REQUEST_EXAMPLES)],
-    llm: Annotated[BaseLLMProvider, Depends(get_llm_provider)],
+    selection: Annotated[ProviderSelection, Depends(get_optional_llm_provider)],
     service: Annotated[FactCheckService, Depends(get_fact_check_service)],
 ) -> FactCheckReport:
-    return await service.check_text(body.claim, llm, country_override=body.country)
+    return await service.check_text(
+        body.claim, selection.provider, country_override=body.country, notes=selection.notes
+    )

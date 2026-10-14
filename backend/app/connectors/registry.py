@@ -1,19 +1,55 @@
-"""Builds the set of government connectors sharing one HTTP client and cache."""
+"""Builds every primary-source connector sharing one HTTP client and one TTL cache."""
 
 from __future__ import annotations
+
+import asyncio
+import logging
 
 import httpx
 
 from app.connectors.base import BaseGovConnector, TTLCache, build_http_client
-from app.connectors.br.camara_connector import CamaraConnector
-from app.connectors.br.ibge_connector import IbgeConnector
-from app.connectors.fr.data_gouv_connector import DataGouvConnector
-from app.core.config import Settings
-
-CONNECTOR_CLASSES: tuple[type[BaseGovConnector], ...] = (
+from app.connectors.br_gov import (
     CamaraConnector,
     IbgeConnector,
+    SenadoConnector,
+    TransparenciaConnector,
+)
+from app.connectors.fr_gov import DataGouvConnector, InseeConnector, LegifranceConnector
+from app.connectors.global_geopolitics import GdeltConnector, ReliefWebConnector
+from app.connectors.legal_justice import (
+    BrLegislationConnector,
+    CourDeCassationConnector,
+    EurLexConnector,
+    StjPrecedentsConnector,
+)
+from app.connectors.piste import PisteAuth
+from app.connectors.science_health import PubMedConnector, WhoGhoConnector
+from app.connectors.web_archive import WaybackConnector
+from app.core.config import Settings
+
+logger = logging.getLogger(__name__)
+
+#: Order = listing order. Keyless (zero-cost) sources first; credentialed ones are optional.
+CONNECTOR_CLASSES: tuple[type[BaseGovConnector], ...] = (
+    # Brazil
+    CamaraConnector,
+    SenadoConnector,
+    IbgeConnector,
+    BrLegislationConnector,
+    StjPrecedentsConnector,
+    TransparenciaConnector,
+    # France / EU
     DataGouvConnector,
+    InseeConnector,
+    EurLexConnector,
+    LegifranceConnector,
+    CourDeCassationConnector,
+    # Global
+    PubMedConnector,
+    WhoGhoConnector,
+    GdeltConnector,
+    ReliefWebConnector,
+    WaybackConnector,
 )
 
 
@@ -28,15 +64,36 @@ def build_connectors(
         ttl_seconds=settings.connector_cache_ttl_seconds,
         max_entries=settings.connector_cache_max_entries,
     )
-    connectors = [
-        cls(
+    extras = {
+        "piste_auth": PisteAuth(
             client,
+            settings.piste_client_id,
+            settings.piste_client_secret,
+            sandbox=settings.piste_sandbox,
             timeout_seconds=settings.connector_timeout_seconds,
-            max_retries=settings.connector_max_retries,
-            backoff_base_seconds=settings.connector_backoff_base_seconds,
-            backoff_max_seconds=settings.connector_backoff_max_seconds,
-            cache=cache,
         )
-        for cls in CONNECTOR_CLASSES
+    }
+    common = {
+        "timeout_seconds": settings.connector_timeout_seconds,
+        "max_retries": settings.connector_max_retries,
+        "backoff_base_seconds": settings.connector_backoff_base_seconds,
+        "backoff_max_seconds": settings.connector_backoff_max_seconds,
+        "cache": cache,
+    }
+    connectors = [
+        cls.from_settings(settings, client, extras, **common) for cls in CONNECTOR_CLASSES
     ]
+    for connector in connectors:
+        if not connector.enabled:
+            logger.info("connector %s disabled: %s", connector.source_id, connector.disabled_reason)
     return connectors, client
+
+
+async def warm_up(connectors: list[BaseGovConnector]) -> None:
+    """Preload bulk datasets in the background; failures are logged, never raised."""
+    results = await asyncio.gather(
+        *(c.warm_up() for c in connectors if c.enabled), return_exceptions=True
+    )
+    for result in results:
+        if isinstance(result, Exception):
+            logger.warning("connector warm-up failed: %s", result)

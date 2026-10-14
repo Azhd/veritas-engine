@@ -1,4 +1,4 @@
-"""Government connector routes. They need no LLM key, so anyone can test the data sources."""
+"""Primary-source connector routes. They need no AI key: zero-cost access for every citizen."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from fastapi import APIRouter, Body, Depends
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_fact_check_service
-from app.schemas.evidence import Country, Evidence
+from app.schemas.evidence import Country, Domain, Evidence
 from app.schemas.fact_check import ClaimAnalysis, ConnectorFailure, CountryContext
 from app.services.fact_checker import FactCheckService
 
@@ -20,6 +20,9 @@ class ConnectorInfo(BaseModel):
     country: Country
     publisher: str
     base_url: str
+    domains: list[Domain]
+    enabled: bool
+    disabled_reason: str | None = None
 
 
 class EvidenceSearchRequest(BaseModel):
@@ -34,6 +37,19 @@ class EvidenceSearchRequest(BaseModel):
     )
     people: list[str] = Field(
         default_factory=list, max_length=2, description="Deputados para buscar discursos."
+    )
+    domains: list[Domain] = Field(
+        default_factory=list,
+        description="Áreas a consultar; vazio = política/legislação e economia/estatística.",
+    )
+    keywords_en: list[str] = Field(
+        default_factory=list, max_length=8, description="Termos em inglês (PubMed, OMS, GDELT)."
+    )
+    legal_references: list[str] = Field(
+        default_factory=list, max_length=5, description="Ex.: 'Lei 12.965/2014'."
+    )
+    urls: list[str] = Field(
+        default_factory=list, max_length=3, description="URLs para auditar no Internet Archive."
     )
 
 
@@ -52,8 +68,33 @@ SEARCH_EXAMPLES = {
         "summary": "BR · Proposições na Câmara",
         "value": {"keywords": ["reforma tributária"], "country": "BR"},
     },
+    "saude": {
+        "summary": "Saúde · Vacinas e autismo (PubMed + OMS)",
+        "value": {
+            "keywords": ["vacina autismo"],
+            "keywords_en": ["vaccine autism"],
+            "domains": ["health_science"],
+        },
+    },
+    "juridico": {
+        "summary": "Jurídico · Lei citada + precedentes do STJ",
+        "value": {
+            "keywords": ["marco civil da internet"],
+            "legal_references": ["Lei 12.965/2014"],
+            "country": "BR",
+            "domains": ["legal_justice"],
+        },
+    },
+    "arquivo_web": {
+        "summary": "Memória da web · Histórico de uma página (Wayback)",
+        "value": {
+            "keywords": ["pagina"],
+            "urls": ["http://g1.globo.com"],
+            "domains": ["web_history"],
+        },
+    },
     "fr_chomage": {
-        "summary": "FR · Datasets sobre desemprego (data.gouv.fr)",
+        "summary": "FR · Datasets sobre desemprego (data.gouv.fr + INSEE)",
         "value": {"keywords": ["chômage"], "country": "FR"},
     },
 }
@@ -64,7 +105,15 @@ async def list_connectors(
     service: Annotated[FactCheckService, Depends(get_fact_check_service)],
 ) -> list[ConnectorInfo]:
     return [
-        ConnectorInfo(id=c.source_id, country=c.country, publisher=c.publisher, base_url=c.base_url)
+        ConnectorInfo(
+            id=c.source_id,
+            country=c.country,
+            publisher=c.publisher,
+            base_url=c.base_url,
+            domains=sorted(c.domains),
+            enabled=c.enabled,
+            disabled_reason=c.disabled_reason,
+        )
         for c in service.connectors
     ]
 
@@ -83,7 +132,15 @@ async def search_evidence(
     service: Annotated[FactCheckService, Depends(get_fact_check_service)],
 ) -> EvidenceSearchResponse:
     analysis = ClaimAnalysis(
-        country=body.country, keywords=body.keywords, topics=body.topics, people=body.people
+        country=body.country,
+        domains=body.domains,
+        keywords=body.keywords,
+        keywords_en=body.keywords_en,
+        topics=body.topics,
+        topics_en=body.keywords_en,
+        people=body.people,
+        legal_references=body.legal_references,
+        urls=body.urls,
     )
     evidence, queried, failures = await service.collect_evidence(analysis)
     return EvidenceSearchResponse(
