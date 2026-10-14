@@ -72,7 +72,7 @@ class FactCheckService:
             analysis.keywords = heuristic_keywords(claim)
 
         # 3. evidence retrieval
-        evidence, queried, failures = await self._collect_evidence(analysis)
+        evidence, queried, failures = await self.collect_evidence(analysis)
         numbered = [(f"E{i}", item) for i, item in enumerate(evidence, start=1)]
 
         # 4 + 5. grounded verdict
@@ -147,7 +147,7 @@ class FactCheckService:
             notes.append("Triagem por LLM falhou; usada detecção heurística de país/termos.")
             return heuristic_analysis(claim)
 
-    async def _collect_evidence(
+    async def collect_evidence(
         self, analysis: ClaimAnalysis
     ) -> tuple[list[Evidence], list[str], list[ConnectorFailure]]:
         countries = analysis.country.countries()

@@ -12,13 +12,59 @@ from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.responses import HTMLResponse, RedirectResponse
 
-from app.api.v1 import byok, fact_check
+from app.api.v1 import byok, connectors, fact_check
 from app.connectors.registry import build_connectors
 from app.core.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
 from app.engines.factory import ProviderFactory
 from app.services.fact_checker import FactCheckService
+
+API_DESCRIPTION = """
+Verificação de fatos com cruzamento de dados em **fontes oficiais do Brasil e da França**,
+usando a **sua própria chave de IA (BYOK)**. A chave vale só para a requisição e não é armazenada.
+
+### Como testar em 3 passos
+1. **Sem chave de IA:** abra `POST /api/v1/connectors/search` → *Try it out* → escolha um
+   exemplo → *Execute*. Você verá os dados oficiais (Câmara, IBGE, data.gouv.fr).
+2. **Configure seu provedor:** clique em **Authorize** 🔒 e preencha `X-Provider`
+   (`gemini`, `anthropic`, `openai`, `groq` ou `ollama`) e `X-API-Key`.
+   Com Ollama local basta `X-Provider = ollama`.
+3. **Cheque uma alegação:** em `POST /api/v1/fact-check/text`, escolha um exemplo e execute.
+
+> Chaves gratuitas para testar: Gemini ([aistudio.google.com](https://aistudio.google.com/apikey))
+> e Groq ([console.groq.com](https://console.groq.com/keys)).
+"""
+
+OPENAPI_TAGS = [
+    {"name": "fact-check", "description": "Checagem de alegações (requer provedor de IA)."},
+    {"name": "connectors", "description": "Fontes oficiais BR/FR. **Não precisa de chave.**"},
+    {"name": "byok", "description": "Provedores de IA aceitos e headers esperados."},
+    {"name": "health", "description": "Estado do serviço."},
+]
+
+# Pinned instead of FastAPI's floating ``swagger-ui-dist@5``: releases from 5.18 on ship a partial
+# dark mode with unreadable text on dark-themed systems, and pinning keeps the docs reproducible.
+SWAGGER_UI_VERSION = "5.17.14"
+SWAGGER_UI_CDN = f"https://cdn.jsdelivr.net/npm/swagger-ui-dist@{SWAGGER_UI_VERSION}"
+
+# Swagger UI only ships a light theme and leaves the page background transparent, so dark-mode
+# browsers paint a dark canvas under dark text. Declare the light scheme and an opaque background.
+SWAGGER_LIGHT_THEME = (
+    '<meta name="color-scheme" content="light">'
+    "<style>html, body { background: #fafafa; color-scheme: light; }</style>"
+)
+
+SWAGGER_UI_PARAMETERS = {
+    "tryItOutEnabled": True,  # forms are editable right away, no extra "Try it out" click
+    "defaultModelsExpandDepth": -1,  # hide the long "Schemas" section
+    "docExpansion": "list",
+    "displayRequestDuration": True,
+    # Keys are kept only in the tab's memory: they are not saved to localStorage on purpose.
+    "persistAuthorization": False,
+}
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -42,13 +88,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,
-        description=(
-            "Fact-checking multimodal descentralizado (BYOK) com cruzamento de dados em fontes "
-            "oficiais do Brasil e da França. Envie suas credenciais via headers "
-            "`X-Provider`, `X-API-Key`, `X-Endpoint-URL` e `X-Model`."
-        ),
+        description=API_DESCRIPTION,
+        openapi_tags=OPENAPI_TAGS,
         lifespan=lifespan,
-        docs_url="/docs",
+        docs_url=None,  # served below with a pinned Swagger UI
         redoc_url="/redoc",
     )
     app.add_middleware(
@@ -59,12 +102,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     register_exception_handlers(app)
 
+    @app.get("/docs", include_in_schema=False)
+    async def swagger_ui() -> HTMLResponse:
+        page = get_swagger_ui_html(
+            openapi_url=app.openapi_url or "/openapi.json",
+            title=f"{settings.app_name} - Swagger UI",
+            swagger_js_url=f"{SWAGGER_UI_CDN}/swagger-ui-bundle.js",
+            swagger_css_url=f"{SWAGGER_UI_CDN}/swagger-ui.css",
+            swagger_ui_parameters=SWAGGER_UI_PARAMETERS,
+        )
+        html = page.body.decode().replace("</head>", f"{SWAGGER_LIGHT_THEME}</head>", 1)
+        return HTMLResponse(html)
+
+    @app.get("/", include_in_schema=False)
+    async def root() -> RedirectResponse:
+        return RedirectResponse(url="/docs")
+
     @app.get("/healthz", tags=["health"], summary="Health check")
     async def healthz() -> dict[str, str]:
         return {"status": "ok", "service": settings.app_name, "version": settings.app_version}
 
     api_v1 = APIRouter(prefix="/api/v1")
     api_v1.include_router(fact_check.router)
+    api_v1.include_router(connectors.router)
     api_v1.include_router(byok.router)
     app.include_router(api_v1)
     return app

@@ -297,3 +297,68 @@ def test_heuristic_keywords_drop_stopwords():
     keywords = heuristic_keywords("A inflação no Brasil passou de 10% em 2026 segundo o governo")
     assert "inflação" in keywords
     assert "para" not in keywords and "2026" not in keywords
+
+
+# =============================================================== developer experience (Swagger)
+def test_root_redirects_to_docs(client):
+    response = client.get("/", follow_redirects=False)
+    assert response.status_code in (302, 307)
+    assert response.headers["location"] == "/docs"
+
+
+def test_openapi_exposes_byok_headers_as_authorize_schemes(client):
+    spec = client.get("/openapi.json").json()
+    schemes = spec["components"]["securitySchemes"]
+    assert {s["name"] for s in schemes.values()} == {
+        "X-Provider",
+        "X-API-Key",
+        "X-Endpoint-URL",
+        "X-Model",
+    }
+    assert all(s["type"] == "apiKey" and s["in"] == "header" for s in schemes.values())
+    operation = spec["paths"][ENDPOINT]["post"]
+    assert len(operation["security"]) == 4
+    examples = operation["requestBody"]["content"]["application/json"]["examples"]
+    assert {"br_inflacao", "fr_chomage"} <= set(examples)
+    # Connector routes stay public: no security requirement.
+    assert "security" not in spec["paths"]["/api/v1/connectors/search"]["post"]
+
+
+def test_swagger_ui_settings(client):
+    html = client.get("/docs").text
+    assert '"tryItOutEnabled": true' in html
+    assert '"defaultModelsExpandDepth": -1' in html
+    assert '"persistAuthorization": false' in html
+    assert "swagger-ui-dist@5.17.14/swagger-ui.css" in html
+    assert '<meta name="color-scheme" content="light">' in html
+
+
+# =============================================================== keyless connector routes
+def test_list_connectors(client):
+    body = client.get("/api/v1/connectors").json()
+    assert [c["id"] for c in body] == ["br.camara", "br.ibge", "fr.data_gouv"]
+
+
+def test_connector_search_needs_no_llm_key(client, upstream):
+    response = client.post(
+        "/api/v1/connectors/search",
+        json={"keywords": ["inflação"], "country": "BR", "topics": ["inflação"]},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["connectors_queried"] == ["br.camara", "br.ibge"]
+    assert [e["connector"] for e in body["evidence"]] == ["br.camara", "br.ibge"]
+    assert "www.data.gouv.fr" not in upstream.hits
+    assert ScriptedProvider.instances == []
+
+
+def test_connector_search_reports_failures(client, upstream):
+    upstream.failing_hosts = {"www.data.gouv.fr"}
+    body = client.post("/api/v1/connectors/search", json={"keywords": ["chômage"]}).json()
+    assert body["connectors_queried"] == ["br.camara", "br.ibge", "fr.data_gouv"]
+    assert body["connector_failures"][0]["connector"] == "fr.data_gouv"
+
+
+def test_connector_search_requires_keywords(client):
+    response = client.post("/api/v1/connectors/search", json={"keywords": []})
+    assert response.status_code == 422
