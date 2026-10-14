@@ -181,8 +181,8 @@ Status: PRONTO PARA REVISÃO DO ANTIGRAVITY
 ### 3. Validação do Usuário & Publicação Remota
 *(Preenchido após o gatilho de aprovação do usuário)*
 
-- **Status de Publicação**: `PENDENTE`
-- **Instruções de Teste Apresentadas**:
-- **Aprovação do Usuário**: [ ] SIM (`chat: "Validado" / "Aprovado"`) | [ ] NÃO
-- **Commit Hash**:
-- **Branch / Repositório Remoto**:
+- **Status de Publicação**: `PUBLICADA NO GITHUB` (push feito a pedido explícito do usuário no chat, em 2026-10-14, **antes** da auditoria do Antigravity; o status da Fase 1 continua `PRONTO PARA REVISÃO DO ANTIGRAVITY`)
+- **Instruções de Teste Apresentadas**: ver `backend/README.md` (`./run.ps1` ou `./run.sh`, Swagger em `http://127.0.0.1:8000/docs`, exemplo cURL de `POST /api/v1/fact-check/text`)
+- **Aprovação do Usuário**: [x] SIM (o usuário forneceu a URL do repositório e pediu a publicação) | [ ] NÃO
+- **Commit Hash**: `096b7cc` (feat: bootstrap backend with BYOK engine, gov connectors and text fact-check API)
+- **Branch / Repositório Remoto**: `main` → https://github.com/Azhd/veritas-engine.git (o branch local `master` foi renomeado para `main`)
