@@ -108,7 +108,7 @@ class WorldBankConnector(BaseGovConnector):
             code = WORLD_BANK_CODES[indicator.key]
             payload = await self._get_json(
                 f"/country/{';'.join(countries)}/indicator/{code}",
-                {"format": "json", "mrv": 6, "per_page": 60},
+                {"format": "json", "mrv": 8, "per_page": 80},
             )
             rows = payload[1] if isinstance(payload, list) and len(payload) > 1 else []
             by_country: dict[str, list[dict[str, Any]]] = {}
@@ -117,7 +117,7 @@ class WorldBankConnector(BaseGovConnector):
                     by_country.setdefault(row["country"]["id"], []).append(row)
             for iso, items in by_country.items():
                 items.sort(key=lambda r: r["date"], reverse=True)
-                points = [(r["date"], float(r["value"])) for r in items[:5]]
+                points = [(r["date"], float(r["value"])) for r in items[:7]]
                 name = items[0]["country"]["value"]
                 unit = indicator.unit if indicator.key != "gdp" else ""
                 if indicator.key == "gdp":
@@ -173,7 +173,7 @@ class EurostatConnector(BaseGovConnector):
             for geo in geos[:2]:
                 code = _EUROSTAT_GEO.get(geo, geo)
                 payload = await self._get_json(
-                    f"/{dataset}", {"geo": code, "lang": "en", "lastTimePeriod": 5, **filters}
+                    f"/{dataset}", {"geo": code, "lang": "en", "lastTimePeriod": 7, **filters}
                 )
                 points = _jsonstat_points(payload)
                 if not points:
