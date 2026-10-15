@@ -29,7 +29,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 
@@ -49,6 +49,7 @@ from app.schemas.forensics import (
 logger = logging.getLogger(__name__)
 
 CHUNK = 1024 * 1024
+MAX_REDIRECTS = 3
 FFMPEG_TIMEOUT_SECONDS = 120
 DIRECT_MEDIA_EXT = re.compile(
     r"\.(jpe?g|png|webp|gif|heic|mp3|m4a|wav|ogg|opus|mp4|mov|webm|mkv)$", re.IGNORECASE
@@ -221,7 +222,18 @@ class MediaInspector:
     async def _download_direct(self, url: str, workdir: Path) -> IngestedMedia:
         client = self._http or httpx.AsyncClient(follow_redirects=False, timeout=30)
         try:
+            # Redirects are followed by hand so every hop passes the SSRF check.
+            for _ in range(MAX_REDIRECTS):
+                head = await client.head(url)
+                if not head.is_redirect:
+                    break
+                url = urljoin(url, head.headers["location"])
+                await asyncio.to_thread(assert_public_url, url)
+            else:
+                raise MediaError("O link redireciona vezes demais.")
             async with client.stream("GET", url) as response:
+                if response.is_redirect:
+                    raise MediaError("O link mudou de endereço durante o download.")
                 if response.status_code >= 400:
                     raise MediaError(f"O link respondeu HTTP {response.status_code}.")
                 declared = int(response.headers.get("content-length") or 0)

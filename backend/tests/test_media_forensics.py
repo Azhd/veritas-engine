@@ -204,6 +204,44 @@ async def test_ingest_enforces_size_limit_and_hashes():
     assert not workdir.exists()  # always cleaned up
 
 
+def _fake_dns(monkeypatch, table: dict[str, str]) -> None:
+    monkeypatch.setattr(
+        "app.forensics.media_inspector.socket.getaddrinfo",
+        lambda host, *a, **k: [(2, 1, 6, "", (table[host], 443))],
+    )
+
+
+async def test_direct_download_follows_safe_redirects(monkeypatch):
+    _fake_dns(monkeypatch, {"short.example": "93.184.215.14", "cdn.example": "93.184.215.15"})
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "short.example":
+            return httpx.Response(302, headers={"location": "https://cdn.example/clip.jpg"})
+        return httpx.Response(200, content=b"\xff\xd8\xff" + b"x" * 100)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    inspector = MediaInspector(make_settings(), http_client=client)
+    async with inspector.workspace() as workdir:
+        media = await inspector.ingest_url("https://short.example/v.jpg", workdir)
+    assert media.kind is MediaKind.IMAGE and media.source_url == "https://cdn.example/clip.jpg"
+
+
+async def test_direct_download_blocks_redirect_into_internal_network(monkeypatch):
+    _fake_dns(monkeypatch, {"evil.example": "93.184.215.14", "127.0.0.1": "127.0.0.1"})
+    requested: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested.append(str(request.url))
+        return httpx.Response(302, headers={"location": "http://127.0.0.1/secret.mp4"})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    inspector = MediaInspector(make_settings(), http_client=client)
+    async with inspector.workspace() as workdir:
+        with pytest.raises(UnsafeUrlError):
+            await inspector.ingest_url("https://evil.example/v.mp4", workdir)
+    assert requested == ["https://evil.example/v.mp4"]  # the internal address is never fetched
+
+
 def _photo_with_exif(path: Path, software: str | None = None) -> Path:
     from PIL import Image
 

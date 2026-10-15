@@ -1,8 +1,8 @@
-# Veritas Engine — Backend (Alpha 1.2)
+# Veritas Engine — Backend (Alpha 1.2 + Fase 3)
 
 API FastAPI de fact-checking em **fontes primárias** (governos do Brasil e da França, leis e
 jurisprudência, ciência e saúde, clima, geopolítica e memória da web), com IA opcional via **BYOK**,
-e o **app do cidadão** servido em `/`.
+**perícia multimodal** (foto, vídeo e áudio) e o **app do cidadão** servido em `/`.
 
 > Guia de uso para não desenvolvedores (instalação passo a passo e solução de problemas):
 > [README principal](../README.md).
@@ -31,9 +31,31 @@ python -m venv .venv
 
 - **App do cidadão: `http://127.0.0.1:8000/`** · Swagger (desenvolvedores): `/docs` · ReDoc: `/redoc` · Health: `GET /healthz`
 
+### Dependências de mídia (em camadas)
+
+| Arquivo | Instala | Como |
+| --- | --- | --- |
+| `requirements.txt` | API + Pillow (EXIF), yt-dlp, python-multipart | `./run.ps1` · `./run.sh` |
+| `requirements-media.txt` | + `imageio-ffmpeg` (FFmpeg embutido) e `c2pa-python` (~300 MB no Windows) | `./run.ps1 -Full` · `./run.sh --full` |
+| `requirements-whisper.txt` | + `faster-whisper` (transcrição offline; baixa o modelo na 1ª vez) | `./run.ps1 -Whisper` · `./run.sh --whisper` |
+
+Nada disso é obrigatório: sem uma ferramenta, a etapa correspondente é pulada e o laudo explica o
+motivo. `GET /api/v1/media/capabilities` mostra o que está disponível. FFmpeg e ExifTool do sistema
+(no `PATH`) têm prioridade sobre os embutidos.
+
+### Docker
+
+```bash
+docker compose up --build      # na raiz do repositório; abre em http://localhost:8000
+```
+
+A imagem (`backend/Dockerfile`, multi-stage) inclui FFmpeg, ExifTool, C2PA e yt-dlp. O `.env` do
+backend é lido se existir; a mídia temporária fica no volume `veritas-media` e é apagada após cada
+análise. (O build ainda não foi testado: o ambiente de desenvolvimento Windows não tem Docker.)
+
 ## App do cidadão (`/`)
 
-Página única e responsiva (HTML/CSS/JS puros em `app/web/`, ~73 KB, sem build nem dependências):
+Página única e responsiva (HTML/CSS/JS puros em `app/web/`, ~100 KB, sem build nem dependências):
 
 - **Entrada:** texto, **print/foto** (o texto é lido no próprio aparelho por OCR gratuito, o Tesseract.js,
   baixado só quando uma imagem é enviada) e o **link de onde a informação veio** (auditado na Wayback Machine).
@@ -49,6 +71,11 @@ Página única e responsiva (HTML/CSS/JS puros em `app/web/`, ~73 KB, sem build 
   linguagem simples; afirmações vagas sobre acontecimentos recebem uma dica pedindo lugar e data.
 - **Cache:** os arquivos de `app/web/` são servidos com `Cache-Control: no-cache` (revalidação por
   ETag), para ninguém ficar com versão antiga após uma atualização.
+- **Mídia (Fase 3):** foto/vídeo/áudio (arrastar, colar ou botão) ou link de vídeo vão para
+  `POST /api/v1/fact-check/media`. O resultado ganha o bloco **"Perícia da mídia"** (selo C2PA,
+  câmera, data, GPS com link para o mapa, software de edição, duração, SHA-256, quadros do vídeo) e a
+  **"Linha do tempo"** expansível com o veredito de cada frase. Se a fala não puder ser transcrita, um
+  alerta explica como ativar a IA grátis.
 
 ## Testando pelo Swagger (`/docs`)
 
@@ -93,6 +120,23 @@ responderam.
 homologadas: downloads em lote (STJ, Copernicus) usam `VERITAS_DATASET_TIMEOUT_SECONDS` (30 s) e
 cache longo; GDELT e Wayback são best-effort (GDELT com intervalo mínimo de 5,5 s entre chamadas).
 
+## Perícia multimodal (`app/forensics/`)
+
+| Módulo | Função |
+| --- | --- |
+| `tools.py` | Detecta FFmpeg, ExifTool, Pillow, yt-dlp, C2PA e faster-whisper (`detect_capabilities()`, em cache) |
+| `media_inspector.py` | Recebe upload (streaming, limite de 50 MB) ou link (download direto ou yt-dlp, até 15 min), identifica o tipo pelos bytes, calcula SHA-256, lê EXIF, extrai áudio (WAV 16 kHz mono) e quadros-chave (JPEG 320 px). A pasta temporária é sempre apagada |
+| `c2pa_validator.py` | Lê o manifesto C2PA e classifica: `AI_GENERATED`, `AI_EDITED`, `CAMERA_CAPTURE`, `EDITED`, `SIGNED_UNKNOWN`, `INVALID_SIGNATURE`, `NO_MANIFEST` ou `UNAVAILABLE` (pelo `digitalSourceType` do IPTC; o nome da ferramenta só decide quando não há tipo declarado) |
+| `audio_transcriber.py` | Transcrição com início/fim de cada trecho: **Groq Whisper** (grátis, mesma chave do Groq), **Gemini** (áudio nativo), OpenAI Whisper ou `faster-whisper` local; o áudio sobe em MP3 mono 32 kbps. Depois escolhe até 3 afirmações checáveis com minutagem (IA ou heurística) |
+
+`app/services/media_checker.py` junta tudo: perícia → transcrição → afirmações com minutagem →
+checagem de cada uma nas fontes primárias (em sequência, para respeitar os limites dos planos
+grátis). Sem IA, devolve a perícia completa e explica como ativar a transcrição.
+
+**Segurança:** links só para hosts públicos (IPs privados/loopback recusados com `unsafe_url`);
+tipo de arquivo decidido pelos bytes, não pela extensão; metadados EXIF saneados; nada fica guardado
+após a resposta.
+
 ## Testes
 
 ```bash
@@ -101,7 +145,10 @@ cd backend
 .venv/Scripts/ruff check . && .venv/Scripts/ruff format --check .
 ```
 
-223 testes; nenhum faz chamadas de rede reais (SDKs e APIs públicas são mockados).
+275 testes; nenhum faz chamadas de rede reais (SDKs e APIs públicas são mockados). Os testes de
+mídia (`tests/test_media_forensics.py`) usam um FFmpeg falso e imagens geradas na hora; os de C2PA
+assinam JPEGs com uma cadeia de certificados descartável e são pulados se o `c2pa-python` não estiver
+instalado.
 
 ## Configuração (`.env`)
 
@@ -115,6 +162,8 @@ Todas as variáveis têm o prefixo `VERITAS_` e são opcionais; a lista completa
 | `GEMINI_MODEL`, `GROQ_MODEL`... | Modelo padrão de cada provedor (Gemini: `gemini-flash-latest`) |
 | `CONNECTOR_TIMEOUT_SECONDS` | Timeout por consulta às fontes (8 s) |
 | `TRANSPARENCIA_API_KEY`, `PISTE_CLIENT_ID/SECRET`, `RELIEFWEB_APPNAME`, `NCBI_API_KEY` | Credenciais gratuitas opcionais de fontes |
+| `MEDIA_MAX_BYTES`, `MEDIA_MAX_DURATION_SECONDS`, `MEDIA_KEYFRAMES` | Limites da perícia (50 MB, 900 s, 6 quadros) |
+| `MEDIA_TMP_DIR`, `WHISPER_LOCAL_MODEL` | Pasta temporária de mídia e modelo do Whisper local (`base`) |
 
 ## BYOK — como chamar
 
@@ -129,11 +178,18 @@ Todas as variáveis têm o prefixo `VERITAS_` e são opcionais; a lista completa
 curl -X POST http://127.0.0.1:8000/api/v1/fact-check/text \
   -H "Content-Type: application/json" \
   --data-binary '{"claim": "Vacinas causam autismo em crianças."}'
+
+# Vídeo, com transcrição grátis pelo Groq Whisper
+curl -X POST http://127.0.0.1:8000/api/v1/fact-check/media \
+  -H "X-Provider: groq" -H "X-API-Key: $GROQ_KEY" \
+  -F "file=@video.mp4" -F "country=BR"
 ```
 
 | Rota | Descrição |
 | --- | --- |
 | `POST /api/v1/fact-check/text` | Checagem (`claim`, `country` e `source_url` opcionais); sem IA devolve `SEM_CHAVE_IA_DADOS_BRUTOS` |
+| `POST /api/v1/fact-check/media` | Multipart: `file` (até 50 MB) **ou** `url`, mais `claim` e `country` opcionais. Devolve `forensics` (laudo) e `checks` (afirmações com minutagem e o relatório de cada uma) |
+| `GET /api/v1/media/capabilities` | Ferramentas de mídia disponíveis, o que dá para analisar e o que falta instalar |
 | `POST /api/v1/byok/test` | Testa a chave/modelo informados nos headers (`{ok, provider, model, message}`) |
 | `GET /api/v1/byok/providers` | Provedores (gratuitos primeiro) com o passo a passo para obter a chave |
 | `GET /api/v1/connectors` | Fontes disponíveis, domínios e motivo de desativação |
@@ -156,12 +212,14 @@ app/
 ├── main.py                     # create_app(), lifespan (warm-up de datasets), /healthz, CORS
 ├── core/                       # config (pydantic-settings, prefixo VERITAS_), erros → HTTP
 ├── api/deps.py                 # provedor BYOK opcional por requisição (criado e descartado)
-├── api/v1/                     # fact_check.py, connectors.py, byok.py (inclui /byok/test)
+├── api/v1/                     # fact_check.py (/text, /media), connectors.py, byok.py, media.py
 ├── engines/                    # base.py (BaseLLMProvider), factory.py, providers/, prompt_templates/
 ├── connectors/                 # base.py, br_gov, fr_gov, legal_justice, science_health,
 │                               # global_geopolitics, climate_environment, web_archive,
 │                               # piste (OAuth), registry
-├── schemas/                    # evidence.py (Domain, Evidence), fact_check.py
-├── services/                   # fact_checker.py (pipeline + modo cidadão), claim_heuristics.py
+├── forensics/                  # tools.py, media_inspector.py, c2pa_validator.py, audio_transcriber.py
+├── schemas/                    # evidence.py (Domain, Evidence), fact_check.py, forensics.py
+├── services/                   # fact_checker.py (pipeline + modo cidadão), media_checker.py,
+│                               # claim_heuristics.py
 └── web/                        # app do cidadão: index.html, styles.css, app.js
 ```

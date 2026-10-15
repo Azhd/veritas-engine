@@ -41,7 +41,7 @@
 | :--- | :--- | :--- | :--- |
 | **Fase 1** | **Fundação & Core:** Estrutura FastAPI, Router BYOK multi-provedor (Gemini, Claude, OpenAI, Groq, Ollama) | `PUBLICADA NO GITHUB` | Claude Code |
 | **Fase 2** | **Conectores de Fontes Primárias & App do Cidadão:** Módulos multidisciplinares assíncronos (`br_gov`, `fr_gov`, `science_health`, `legal_justice`, `global_geopolitics`, `climate_environment`, `web_archive`) + Modo Custo Zero + App Web (`app/web/`) | `PUBLICADA NO GITHUB` (Alpha 1.2, `v1.2.0-alpha`) | Claude Code |
-| **Fase 3** | **Pipeline Multimodal & Forense Digital:** Extração de mídia (`yt-dlp` + FFmpeg), transcrição temporal (Whisper), validação C2PA/EXIF e Dockerização | `EM PROGRESSO` | Claude Code |
+| **Fase 3** | **Pipeline Multimodal & Forense Digital:** Extração de mídia (`yt-dlp` + FFmpeg), transcrição temporal (Whisper), validação C2PA/EXIF e Dockerização | `PRONTO PARA REVISÃO DO ANTIGRAVITY` | Claude Code |
 | **Fase 4** | **Motor de Contexto e Adaptação de Audiência:** `verdict_engine.py` com relatórios em três modos (`general_family`, `journalism_student`, `law_academic`) | `BACKLOG` | Claude Code |
 | **Fase 5** | **Testes Alfa e Consolidação de Release:** Suíte completa de testes E2E, documentação e empacotamento da release Alpha 1.0 | `BACKLOG` | Claude Code |
 
@@ -126,7 +126,7 @@
 
 ## 🎯 FASE 3: Pipeline Multimodal & Forense Digital
 
-**Status da Fase**: `EM PROGRESSO`  
+**Status da Fase**: `PRONTO PARA REVISÃO DO ANTIGRAVITY` (branch `feat/fase-3-forense-multimodal`, commits locais, sem push)  
 **Responsável**: Claude Code (Engenheiro Executor)  
 **Meta**: Dotar o Veritas Engine da capacidade de ingerir e periciar mídias complexas (vídeos, áudios e imagens/fotos) e URLs externas (YouTube, TikTok, X, etc.), realizando extração de áudio/frames, transcrição temporal alinhada (Whisper), perícia EXIF e validação de proveniência criptográfica (C2PA) para detecção de IA.
 
@@ -139,59 +139,63 @@
   - Instalação de dependências Python (`requirements.txt` + `yt-dlp`, `c2pa-python`).
 - [x] Criar `docker-compose.yml` na raiz com o backend e volume temporário de mídia.
 - [x] Adicionar helper no backend checando a disponibilidade de `ffmpeg` e `exiftool` no SO com logs claros e graceful degradation caso ausentes em ambiente Windows/bare-metal.
-  - *Claude Code*: `app/forensics/tools.py` + `GET /api/v1/media/capabilities`. FFmpeg do sistema ou embutido via `imageio-ffmpeg`; EXIF de imagem via Pillow quando não há ExifTool. Dependências pesadas (`c2pa-python` ~300 MB no Windows, `imageio-ffmpeg`) ficam em `requirements-media.txt` (`.un.ps1 -Full`); Whisper offline em `requirements-whisper.txt` (`.un.ps1 -Whisper`). **Dockerfile/compose não foram construídos nesta máquina (Docker ausente).**
+  - *Claude Code*: `app/forensics/tools.py` + `GET /api/v1/media/capabilities`. FFmpeg do sistema ou embutido via `imageio-ffmpeg`; EXIF de imagem via Pillow quando não há ExifTool. Dependências pesadas (`c2pa-python` ~300 MB no Windows, `imageio-ffmpeg`) ficam em `requirements-media.txt` (`.\run.ps1 -Full`); Whisper offline em `requirements-whisper.txt` (`.\run.ps1 -Whisper`). **Dockerfile/compose não foram construídos nesta máquina (Docker ausente).**
 
 ---
 
 ### [TASK 3.2] Orquestrador Forense de Mídia (`forensics/media_inspector.py`)
-- [ ] Criar módulo `backend/app/forensics/media_inspector.py`:
+- [x] Criar módulo `backend/app/forensics/media_inspector.py`:
   - Ingestão de upload de arquivo (`UploadFile`) ou download seguro via `yt-dlp` de URL externa (com limite de duração e tamanho máx de 50 MB).
   - Extração da faixa de áudio em WAV mono 16kHz via FFmpeg.
   - Amostragem inteligente de keyframes (quadros representativos) via FFmpeg.
   - Extração e sanitização de metadados EXIF com `exiftool` (data, câmera, geolocalização se presente, software de edição).
-- [ ] Retornar modelo Pydantic `MediaForensicsReport`.
+- [x] Retornar modelo Pydantic `MediaForensicsReport`.
+  - *Claude Code*: upload em streaming com corte em 50 MB (HTTP 413), download direto via httpx ou `yt-dlp` (limite de 15 min), tipo identificado pelos bytes (não pela extensão), SHA-256, áudio WAV 16 kHz mono, até 6 keyframes JPEG 320 px espaçados pela duração, EXIF via ExifTool ou Pillow (saneado). URLs para IPs privados/loopback recusadas (`unsafe_url`). Pasta temporária sempre apagada.
 
 ---
 
 ### [TASK 3.3] Validador de Proveniência Criptográfica C2PA (`forensics/c2pa_validator.py`)
-- [ ] Criar módulo `backend/app/forensics/c2pa_validator.py`:
+- [x] Criar módulo `backend/app/forensics/c2pa_validator.py`:
   - Inspeção do manifesto JUMBF de proveniência em imagens (JPEG, PNG, WebP) e vídeos.
   - Integração via `c2pa-python` (ou fallback via subprocess `c2patool`).
   - Identificação de geradores de IA (DALL-E, Midjourney, Adobe Firefly, etc.) e assinaturas de captura original.
-- [ ] Retorno integrado no laudo pericial da mídia.
+- [x] Retorno integrado no laudo pericial da mídia.
+  - *Claude Code*: `c2pa-python` (sem `c2patool`). Classificação pelo `digitalSourceType` do IPTC: `AI_GENERATED`, `AI_EDITED`, `CAMERA_CAPTURE`, `EDITED`, `SIGNED_UNKNOWN`, `INVALID_SIGNATURE`, `NO_MANIFEST`, `UNAVAILABLE`. O nome do gerador (DALL-E, Firefly, Midjourney...) só decide quando o manifesto não declara o tipo. Certificado fora da lista de confiança não invalida a assinatura (é o caso comum); adulteração do conteúdo sim.
 
 ---
 
 ### [TASK 3.4] Transcrição Temporal com Timestamps (`forensics/audio_transcriber.py`)
-- [ ] Criar módulo `backend/app/forensics/audio_transcriber.py`:
+- [x] Criar módulo `backend/app/forensics/audio_transcriber.py`:
   - Transcrição com alinhamento temporal (`start_time`, `end_time`, `text`) gerando blocos cronológicos.
   - Suporte a 3 motores (Free-Tier first):
     1. Whisper Local via `faster-whisper` / `whisper` (offline, custo zero).
     2. Provedores BYOK com suporte a áudio multimodal (Gemini ou OpenAI Whisper API).
     3. Fallback gracioso se nenhum motor de áudio estiver configurado.
   - Identificação de afirmações com marcação de minutagem (ex: *"Aos 01:23 do vídeo: ..."*).
+  - *Claude Code*: motores, em ordem: **Groq Whisper** (`whisper-large-v3-turbo`, grátis com a mesma chave do Groq), **Gemini** (áudio nativo, saída JSON com tempos), OpenAI Whisper, `faster-whisper` local (`run.ps1 -Whisper`). O áudio sobe em MP3 mono 32 kbps (~15 min cabem no limite de 25 MB do Groq). Sem motor, a perícia segue e o laudo explica como ativar. Até 3 afirmações com minutagem (IA ou heurística).
 
 ---
 
 ### [TASK 3.5] Endpoints REST de Mídia & Integração com o App do Cidadão
-- [ ] Criar rota `POST /api/v1/fact-check/media` em `backend/app/api/v1/fact_check.py`:
+- [x] Criar rota `POST /api/v1/fact-check/media` em `backend/app/api/v1/fact_check.py`:
   - Aceita `multipart/form-data` com arquivo de mídia ou URL externa.
   - Roda perícia forense (EXIF, C2PA), transcrição e despacha afirmações para o motor de checagem.
-- [ ] Atualizar o App do Cidadão (`backend/app/web/`):
+- [x] Atualizar o App do Cidadão (`backend/app/web/`):
   - Drag & drop para vídeos e áudios, e campo para colar URL de vídeo.
   - Visualização da timeline com vereditos por trecho do vídeo/áudio.
+  - *Claude Code*: orquestração em `app/services/media_checker.py`; afirmações checadas em sequência (limites dos planos grátis). No app: botão "Enviar foto, vídeo ou áudio" (também arrastar/colar), links do YouTube/TikTok/X/Instagram detectados no campo de link, blocos **"Perícia da mídia"** e **"Linha do tempo"** (itens expansíveis com veredito e fontes), manchete "Gerada por IA"/"Contém afirmação falsa" etc.
 
 ---
 
 ### [TASK 3.6] Testes Automatizados Forenses & Handover
-- [ ] Criar testes unitários com mocks em `backend/tests/test_media_forensics.py`:
+- [x] Criar testes unitários com mocks em `backend/tests/test_media_forensics.py`:
   - Teste de metadados EXIF sintéticos.
   - Teste de manifesto C2PA com fixture assinado/não assinado.
   - Teste de transcrição e segmentação temporal.
   - Teste da rota `POST /api/v1/fact-check/media`.
-- [ ] Garantir 100% de aprovação na suíte de testes (`pytest backend/tests -v`).
-- [ ] Atualizar a documentação (pedido do usuário, vale para todas as fases): `README.md` da raiz (como iniciar, o que o app faz, tabela de fases e versões) e `backend/README.md` (rotas, fontes, configuração, estrutura).
-- [ ] Atualizar status para `PRONTO PARA REVISÃO DO ANTIGRAVITY`.
+- [x] Garantir 100% de aprovação na suíte de testes (`pytest backend/tests -v`).
+- [x] Atualizar a documentação (pedido do usuário, vale para todas as fases): `README.md` da raiz (como iniciar, o que o app faz, tabela de fases e versões) e `backend/README.md` (rotas, fontes, configuração, estrutura).
+- [x] Atualizar status para `PRONTO PARA REVISÃO DO ANTIGRAVITY`.
 
 ---
 
@@ -309,3 +313,32 @@
 - **Commit Hash**: merge da Fase 2 em `main` (tag `v1.2.0-alpha`); commits da fase: `5a5106c`, `f386efe`, `2e23b89`, `1182a8f`, `6e74b67`. Tag anterior de candidata: `v0.2.0-rc.1`.
 - **Correções feitas durante a validação do usuário**: diagnóstico de chaves recusadas (motivo do provedor, chaves mascaradas/incompletas, caracteres invisíveis), Gemini 400 "API key not valid" tratado como erro de chave, e escolha automática de modelo quando o padrão não está liberado para a conta (Groq respondia `model_not_found` para `llama-3.3-70b-versatile`). 223 testes passando.
 - **Branch / Repositório Remoto**: `main` → https://github.com/Azhd/veritas-engine (Alpha 1.2) · branch da fase preservada: `feat/fase-2-fontes-primarias`.
+
+---
+
+### 5. Notas de Entrega do Claude Code (Fase 3)
+
+- **Status da Entrega**: `PRONTO PARA REVISÃO DO ANTIGRAVITY`
+- **Data da Entrega**: 2026-10-15
+- **Branch**: `feat/fase-3-forense-multimodal` (a partir da `main` / `v1.2.0-alpha`). Commits locais: `52249d0` (3.1), `6def7e0` (3.2 + 3.3), `1e7a09b` (3.4), `cb373b2` (3.5) e o commit de documentação (3.6). **Nenhum push.**
+- **Arquivos Criados/Modificados**:
+  - **Novos**: `backend/app/forensics/` (`tools.py`, `media_inspector.py`, `c2pa_validator.py`, `audio_transcriber.py`), `app/schemas/forensics.py`, `app/api/v1/media.py`, `app/services/media_checker.py`, `backend/Dockerfile`, `backend/.dockerignore`, `docker-compose.yml`, `.gitattributes`, `backend/requirements-media.txt`, `backend/requirements-whisper.txt`, `tests/test_media_forensics.py`, `tests/c2pa_fixtures.py`.
+  - **Modificados**: `engines/base.py` (`supports_audio`, `transcribe_audio`, `TranscriptionResult`), provedores Groq/OpenAI/Gemini (transcrição), `api/v1/fact_check.py` (`/media`), `api/deps.py`, `main.py`, `schemas/fact_check.py` (`TimedCheck`, `MediaFactCheckReport`), `core/config.py` e `.env.example` (limites de mídia), `requirements.txt` (Pillow, yt-dlp, python-multipart), `run.ps1`/`run.sh` (`-Full`, `-Whisper`), app web (`index.html`, `app.js`, `styles.css`), `README.md` e `backend/README.md`.
+- **Comandos de Teste Executados**:
+  ```bash
+  cd backend
+  .venv/Scripts/python -m pytest tests/ -q
+  .venv/Scripts/python -m ruff check . && .venv/Scripts/python -m ruff format --check .
+  ```
+- **Evidências / Resultados dos Testes**:
+  - `pytest`: **275 passed, 0 failed** (Python 3.13, Windows 11, com `requirements-media.txt` instalado), sem rede. Novos: 52 em `test_media_forensics.py` (detecção de ferramentas, identificação por bytes, SSRF (inclusive em redirecionamentos), limites de upload, EXIF sintético com GPS, inspetor com FFmpeg falso, C2PA assinado/não assinado/adulterado/IA/câmera/editado, transcrição Groq/Gemini/local, afirmações com minutagem, rota `/media`). `ruff` limpo.
+  - **Validação ao vivo** (fora da suíte): vídeo real (duração + 6 keyframes), foto com EXIF (câmera, data, GPS, Photoshop), C2PA com JPEGs assinados localmente (IA, câmera, editado, IA editada, sem manifesto, adulterado), rota `/media` ponta a ponta no servidor e no navegador (imagem "Gerada por IA", quadros do vídeo, alerta de transcrição, linha do tempo), URL para `127.0.0.1` → HTTP 400 `unsafe_url`. Formato da chamada ao Groq Whisper conferido contra a API real (HTTP 401 com chave falsa).
+  - **Não validado**: build da imagem Docker (Docker ausente nesta máquina) e transcrição real com chave válida do Groq/Gemini (o usuário pode testar com a própria chave).
+- **Decisões Técnicas e Observações**:
+  1. **Custo zero e leveza**: dependências pesadas são opcionais em camadas (`requirements-media.txt` com `c2pa-python` ~300 MB no Windows e `imageio-ffmpeg`; `requirements-whisper.txt` com `faster-whisper`). Sem elas o app sobe igual e cada etapa ausente é explicada no laudo. A imagem Docker traz tudo.
+  2. **Transcrição grátis sem instalar nada**: Groq Whisper usa a mesma chave gratuita do Groq já suportada; Gemini transcreve com áudio nativo. Whisper local é a opção offline.
+  3. **Sem IA**: a rota `/media` devolve a perícia completa (C2PA, EXIF, quadros) e explica como ativar a transcrição; nunca vira erro.
+  4. **Segurança**: SSRF bloqueado (IPs privados/loopback/link-local; no download direto, cada redirecionamento é checado antes de ser seguido. **Limitação**: no yt-dlp só o endereço inicial é checado, pois ele segue redirecionamentos por conta própria; para produção pública, sugiro rodar o container sem acesso à rede interna), limite de bytes aplicado durante o streaming, tipo pelo conteúdo, metadados saneados, arquivos temporários sempre apagados, nenhuma mídia guardada.
+  5. **Taxa dos planos grátis**: as afirmações de uma mídia são checadas em sequência (máximo 3).
+  6. **C2PA**: certificados de teste/não confiáveis não invalidam a leitura (`signingCredential.untrusted` é não fatal); só a adulteração do conteúdo vira `INVALID_SIGNATURE`. Para o Antigravity: avaliar se o app deve mostrar ao cidadão quando o assinante não está numa lista de confiança.
+  7. **`libmagic`** (pedido na TASK 3.1) não foi usado: a identificação de tipo é feita pelos primeiros bytes em Python puro, sem dependência de sistema.

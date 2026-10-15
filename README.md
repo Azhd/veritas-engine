@@ -8,11 +8,13 @@
   veredito explicado: Verdadeiro, Falso, Enganoso...
 - Aceita **texto, print/foto** (o texto da imagem é lido no próprio aparelho) e **o link de onde a
   informação veio**.
-- Leve: a página inteira tem cerca de 80 KB e funciona no celular.
+- **Novo (Fase 3):** analisa **fotos, vídeos e áudios** (arquivo ou link do YouTube, TikTok, X,
+  Instagram): diz se a imagem foi **gerada por IA** (credenciais C2PA), mostra câmera, data e local
+  da foto, transcreve a fala com **minutagem** e confere cada afirmação nas fontes oficiais.
+- Leve: a página inteira tem cerca de 100 KB e funciona no celular.
 
-> **Status:** versão **Alpha 1.2** (tag `v1.2.0-alpha`) publicada na `main`: fontes primárias em
-> 7 áreas, modo cidadão sem chave e app web. A Fase 3 (vídeo, áudio e perícia de imagens) está em
-> desenvolvimento na branch `feat/fase-3-forense-multimodal`.
+> **Status:** versão **Alpha 1.2** (tag `v1.2.0-alpha`) publicada na `main`. A **Fase 3** (perícia de
+> vídeo, áudio e imagens) está pronta para revisão na branch `feat/fase-3-forense-multimodal`.
 
 ---
 
@@ -43,6 +45,28 @@ na instalação, marque **"Add python.exe to PATH"**) e do **Git**.
 
 **Linux / macOS:** `cd backend` e depois `./run.sh`.
 
+### Perícia completa de mídia (opcional)
+
+O app básico já lê fotos (câmera, data, GPS) e baixa vídeos por link. Para extrair o áudio e os
+quadros de vídeos e detectar imagens feitas por IA, instale os extras **uma vez**:
+
+```powershell
+.\run.ps1 -Full       # + FFmpeg e C2PA (~300 MB no Windows)
+.\run.ps1 -Whisper    # tudo do -Full + transcrição offline no seu computador
+```
+
+Linux / macOS: `./run.sh --full` ou `./run.sh --whisper`. Depois de instalado, `.\run.ps1` sozinho
+já usa os extras. Para transcrever a fala **não é preciso** o `-Whisper`: a chave grátis do **Groq**
+ou do **Gemini** (veja abaixo) faz isso.
+
+**Com Docker** (tudo incluído, inclusive FFmpeg e ExifTool), na pasta raiz do projeto:
+
+```bash
+docker compose up --build
+```
+
+e abra **http://localhost:8000**.
+
 ### Se algo der errado
 
 | Problema | Solução |
@@ -57,15 +81,27 @@ na instalação, marque **"Add python.exe to PATH"**) e do **Git**.
 
 ## Como usar
 
-1. Cole o texto, cole um print (**Ctrl + V**) ou envie uma foto.
+1. Cole o texto, cole um print (**Ctrl + V**) ou envie uma foto, um vídeo ou um áudio (até 50 MB).
 2. (Opcional) Cole o **link** de onde a informação veio: o Veritas verifica no Internet Archive se a
-   página foi alterada ou apagada.
+   página foi alterada ou apagada. Se for link de vídeo (YouTube, TikTok, X, Instagram), o vídeo é
+   analisado.
 3. Clique em **Verificar agora**.
 
 O resultado mostra o selo do veredito, um resumo em português simples e os cartões das fontes
 oficiais, com data, identificadores (DOI, PMID, número da lei...) e o botão **"Abrir fonte oficial"**.
 Fontes em inglês ou francês têm o botão **"Traduzir"**. Dá para enviar o resultado no WhatsApp,
 copiar o resumo ou baixar um cartão em imagem.
+
+Para fotos, vídeos e áudios aparecem também:
+
+- **Perícia da mídia:** credenciais de conteúdo (C2PA: "Gerada por IA", "Foto de câmera", "Editada"...),
+  câmera, data, local no mapa, programa de edição, duração, impressão digital (SHA-256) e os quadros
+  principais do vídeo.
+- **Linha do tempo:** as frases checáveis ditas no vídeo/áudio, com o minuto (ex.: `02:15`) e o
+  veredito de cada uma. Clique em uma frase para ver as fontes.
+
+Sem IA, a perícia funciona igual; a fala só é transcrita com uma IA grátis (Groq ou Gemini) ou com
+o `-Whisper` instalado.
 
 ### Veredito explicado por IA, de graça
 
@@ -106,7 +142,7 @@ outras.
 | --- | --- | --- |
 | 1 | Fundação: API, motor de IA "traga sua própria chave" (Gemini, Groq, Ollama, Claude, OpenAI) | Publicada |
 | 2 | Fontes primárias em 7 áreas, modo cidadão sem chave e app web | Publicada (Alpha 1.2) |
-| 3 | Vídeo, áudio e imagens: transcrição com minutagem, metadados EXIF, detecção de IA (C2PA), Docker | Em desenvolvimento |
+| 3 | Vídeo, áudio e imagens: transcrição com minutagem, metadados EXIF, detecção de IA (C2PA), Docker | Pronta para revisão |
 | 4 | Relatórios por público: família, estudante de jornalismo, área jurídica/acadêmica | Planejada |
 | 5 | Testes completos e release Alpha 1.0 | Planejada |
 
@@ -129,5 +165,5 @@ O andamento detalhado de cada fase está no [TASK_BOARD.md](TASK_BOARD.md).
 
 ```powershell
 cd backend
-.venv\Scripts\python -m pytest -q      # 223 testes, nenhum acessa a internet
+.venv\Scripts\python -m pytest -q      # 275 testes, nenhum acessa a internet
 ```
