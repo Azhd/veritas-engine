@@ -116,9 +116,13 @@ cidadão e explica o motivo em `notes`.
 | `global_geopolitics.py` | ReliefWeb (ONU/OCHA) | `VERITAS_RELIEFWEB_APPNAME` aprovado |
 | `climate_environment.py` | Copernicus C3S/ECMWF (ERA5 diário), NOAA NCEI (anual) | não |
 | `web_archive.py` | Internet Archive (Wayback Machine) | não |
+| `international.py` | **Banco Mundial** (WDI, todos os países) e **Eurostat** (UE e países-membros): desemprego, inflação, população, PIB e crescimento, expectativa de vida, pobreza extrema | não |
+| `scholarly.py` | **Crossref**: avisos de retratação (editoras + Retraction Watch) sobre o tema da afirmação, só quando ela cita um estudo; mantém só retratações cujo artigo tem ao menos 2 palavras da afirmação | não |
+| `fact_checks.py` | **Google Fact Check Tools**: checagens publicadas por agências (ClaimReview) | `VERITAS_GOOGLE_FACTCHECK_API_KEY` (grátis; vai num header, nunca na URL) |
 | `public_knowledge.py` | **Wikidata** (base pública colaborativa, **não oficial**): chefes de Estado/governo atuais (P35/P6) e cargos de pessoas (P39), com datas e indicação de referência | não |
 
-São 19 conectores, 15 sem nenhuma credencial. O Wikidata só é consultado quando a afirmação fala
+São 23 conectores, 18 sem nenhuma credencial (`countries.py` reconhece ~40 países por nome em
+PT/EN/FR para Banco Mundial, Eurostat e Wikidata). O Wikidata só é consultado quando a afirmação fala
 de um cargo (presidente, ministro, rei, prefeito...) ou de uma pessoa; seus resultados ficam sempre
 depois das fontes oficiais, têm `data.official = false` e `data.referenced` (o Wikidata cita uma
 fonte para aquele dado?). Se o veredito se apoiar só em itens não oficiais sem referência, a
@@ -197,7 +201,7 @@ chave de IA envolvida), cada um com uma afirmação que deveria encontrar:
 Resultado por fonte: `OK` (respondeu com evidência), `EMPTY` (respondeu sem nada), `FAIL` (erro ou
 tempo esgotado) ou `DISABLED` (falta a credencial gratuita). O código de saída é 1 se houver `FAIL`.
 
-362 testes; nenhum faz chamadas de rede reais (SDKs e APIs públicas são mockados). Os testes de
+385 testes; nenhum faz chamadas de rede reais (SDKs e APIs públicas são mockados). Os testes de
 mídia (`tests/test_media_forensics.py`) usam um FFmpeg falso e imagens geradas na hora; os de C2PA
 assinam JPEGs com uma cadeia de certificados descartável e são pulados se o `c2pa-python` não estiver
 instalado.

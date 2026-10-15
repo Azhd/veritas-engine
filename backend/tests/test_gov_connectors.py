@@ -368,7 +368,7 @@ async def test_registry_shares_client_and_cache():
     connectors, client = build_connectors(settings)
     try:
         ids = [c.source_id for c in connectors]
-        assert len(ids) == len(set(ids)) == 19
+        assert len(ids) == len(set(ids)) == 23
         assert {"br.camara", "br.senado", "br.ibge", "fr.data_gouv", "fr.insee"} <= set(ids)
         assert len({id(c.cache) for c in connectors}) == 1
         assert all(c.timeout_seconds == 5 for c in connectors)
@@ -377,7 +377,13 @@ async def test_registry_shares_client_and_cache():
         assert set(retries.values()) == {1}
         disabled = {c.source_id for c in connectors if not c.enabled}
         # Only sources that need credentials are disabled by default (zero-cost first).
-        assert disabled == {"br.transparencia", "fr.legifrance", "fr.judilibre", "geo.reliefweb"}
+        assert disabled == {
+            "br.transparencia",
+            "fr.legifrance",
+            "fr.judilibre",
+            "geo.reliefweb",
+            "factcheck.google",
+        }
     finally:
         await client.aclose()
 
@@ -388,6 +394,7 @@ async def test_registry_enables_credentialed_sources_when_configured():
         transparencia_api_key="cgu-key",
         piste_client_id="id",
         piste_client_secret="secret",
+        google_factcheck_api_key="g-key",
     )
     connectors, client = build_connectors(settings)
     try:

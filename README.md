@@ -159,6 +159,9 @@ servidor usa a chave apenas durante cada verificação e nunca a guarda.
 | Clima e ambiente | Copernicus (União Europeia), NOAA (EUA) |
 | Mundo e conflitos | GDELT, ReliefWeb (ONU)* |
 | Memória da web | Internet Archive (Wayback Machine) |
+| Estatísticas de todos os países | Banco Mundial (desemprego, inflação, população, PIB, expectativa de vida, pobreza) e Eurostat (União Europeia) |
+| Estudos retratados | Crossref, o registro oficial de DOIs, com a base Retraction Watch: avisa quando o "estudo que provou" foi retirado |
+| Checagens jornalísticas* | Google Fact Check Tools: o que agências como Lupa, Aos Fatos, AFP e Les Décodeurs já verificaram |
 | Quem ocupa um cargo ⚠️ | Wikidata (base pública colaborativa, **não oficial**): chefes de Estado e de governo atuais e cargos de uma pessoa |
 
 \* Precisam de uma credencial gratuita configurada no servidor; sem ela, ficam desligadas e não

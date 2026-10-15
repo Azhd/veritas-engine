@@ -136,6 +136,8 @@
     "area_climate_hint": "Copernicus, NOAA",
     "area_web": "Mémoire du web",
     "area_web_hint": "Internet Archive",
+    "area_factcheck": "Vérifications journalistiques",
+    "area_factcheck_hint": "AFP Factuel, Les Décodeurs",
     "lang_from_en": "Traduire de l'anglais",
     "lang_from_fr": "Traduire du français",
     "lang_from_pt": "Traduire du portugais",

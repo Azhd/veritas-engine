@@ -44,6 +44,10 @@ PROBES: dict[str, tuple[str, str]] = {
     "climate.noaa": ("2023 e 2024 foram recordes de temperatura média global.", "pt"),
     "web.wayback": ("Esta notícia foi apagada: https://www.gov.br/pt-br", "pt"),
     "kb.wikidata": ("Macron é presidente da França.", "pt"),
+    "intl.worldbank": ("Unemployment in Argentina rose above 7%.", "en"),
+    "eu.eurostat": ("Le chômage en Allemagne a augmenté en 2025.", "fr"),
+    "science.crossref": ("A study proved that ivermectin cures COVID-19.", "en"),
+    "factcheck.google": ("Vacinas causam autismo.", "pt"),
 }
 
 

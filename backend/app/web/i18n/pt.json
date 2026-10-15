@@ -136,6 +136,8 @@
     "area_climate_hint": "Copernicus, NOAA",
     "area_web": "Memória da web",
     "area_web_hint": "Internet Archive",
+    "area_factcheck": "Checagens jornalísticas",
+    "area_factcheck_hint": "Lupa, Aos Fatos, AFP",
     "lang_from_en": "Traduzir do inglês",
     "lang_from_fr": "Traduzir do francês",
     "lang_from_pt": "Traduzir do português",

@@ -225,6 +225,8 @@ GLOSSARY_EN: dict[str, str] = {
     "terremoto": "earthquake", "seisme": "earthquake", "enchente": "flood",
     "inondation": "flood", "incendio": "wildfire", "furacao": "hurricane",
     "paracetamol": "acetaminophen", "grossesse": "pregnancy", "gravidez": "pregnancy",
+    "ogm": "genetically modified", "transgenicos": "genetically modified",
+    "transgenico": "genetically modified",
     "refem": "hostage", "refens": "hostages", "otage": "hostage", "mortos": "killed",
     "vitimas": "casualties", "victimes": "casualties", "hospital": "hospital",
     "venezuela": "venezuela", "china": "china", "chine": "china", "ira": "iran",

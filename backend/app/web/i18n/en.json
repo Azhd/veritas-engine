@@ -136,6 +136,8 @@
     "area_climate_hint": "Copernicus, NOAA",
     "area_web": "Web memory",
     "area_web_hint": "Internet Archive",
+    "area_factcheck": "Fact-checks",
+    "area_factcheck_hint": "AFP, PolitiFact, Full Fact",
     "lang_from_en": "Translate from English",
     "lang_from_fr": "Translate from French",
     "lang_from_pt": "Translate from Portuguese",

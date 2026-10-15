@@ -51,11 +51,12 @@ const ICONS = {
   video: "M4 6h11a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zm12 4 5-3v10l-5-3",
   mic: "M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3",
   translate: "M4 5h9M8.5 3v2m3 0c-.8 4-3.6 7.3-7 9m2-6c1.2 2.4 3.3 4.5 6 5.5M13 21l4.5-10L22 21m-7.5-3h6",
+  factcheck: "M9 12.5 11 14.5 15.5 10M12 3l2.2 1.6 2.7-.1.8 2.6 2.2 1.6-.9 2.5.9 2.5-2.2 1.6-.8 2.6-2.7-.1L12 21l-2.2-1.6-2.7.1-.8-2.6-2.2-1.6.9-2.5-.9-2.5 2.2-1.6.8-2.6 2.7.1z",
 };
 
 const AREA_COLORS = {
   gov: "--a-gov", stats: "--a-stats", law: "--a-law", science: "--a-science",
-  world: "--a-world", climate: "--a-climate", web: "--a-web",
+  world: "--a-world", climate: "--a-climate", web: "--a-web", factcheck: "--a-fact",
 };
 const areaLabel = (area) => t(`area_${area}`);
 
@@ -68,6 +69,8 @@ const CONNECTORS = {
   "health.who_gho": ["science", "en"], "geo.gdelt": ["world", "en"], "geo.reliefweb": ["world", "en"],
   "web.wayback": ["web", null], "climate.copernicus": ["climate", "pt"],
   "climate.noaa": ["climate", "pt"], "kb.wikidata": ["gov", null],
+  "intl.worldbank": ["stats", null], "eu.eurostat": ["stats", null],
+  "science.crossref": ["science", "en"], "factcheck.google": ["factcheck", null],
 };
 //: Public knowledge bases (collaborative, not official): flagged on every source card.
 const UNOFFICIAL = new Set(["kb.wikidata"]);
@@ -823,6 +826,12 @@ function focusSource(evidenceId) {
   setTimeout(() => item.classList.remove("flash"), 1800);
 }
 
+/** The server prefixes retracted articles ("Artigo retratado: ..."); the red badge says it. */
+function localizeTitle(title) {
+  const prefix = "Artigo retratado: ";
+  return title.startsWith(prefix) ? title.slice(prefix.length) : title;
+}
+
 function sourceArea(source) {
   return (CONNECTORS[source.connector] || ["gov", null])[0];
 }
@@ -880,8 +889,9 @@ function sourceCard(source, index) {
       el("span", { class: "source-area", text: areaLabel(area) }),
       foreign ? el("span", { class: "lang-tag", text: lang.toUpperCase() }) : null,
       source.cited ? el("span", { class: "cited", text: t("cited") }) : null,
-      UNOFFICIAL.has(source.connector) ? el("span", { class: "unofficial", title: t("unofficial_hint"), text: t("unofficial") }) : null),
-    el("h4", { text: source.title }),
+      UNOFFICIAL.has(source.connector) ? el("span", { class: "unofficial", title: t("unofficial_hint"), text: t("unofficial") }) : null,
+      source.connector === "science.crossref" ? el("span", { class: "level retracted", text: t("level_retracted") }) : null),
+    el("h4", { text: localizeTitle(source.title) }),
     el("p", { class: "publisher", text: source.publisher }),
     excerpt,
     longExcerpt ? el("button", {

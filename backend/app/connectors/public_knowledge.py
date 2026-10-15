@@ -16,6 +16,8 @@ from typing import Any
 
 from app.connectors.base import BaseGovConnector
 from app.connectors.br_gov import normalize
+from app.connectors.countries import countries_in as iso_countries_in
+from app.connectors.countries import country_names_in, wikidata_id
 from app.schemas.evidence import Country, Domain, Evidence, EvidenceQuery
 
 WIKIDATA_API = "https://www.wikidata.org/w/api.php"
@@ -35,43 +37,13 @@ OFFICE_WORDS = (
     "gouvernement", "government", "eleito", "elu ", "elected",
 )  # fmt: skip
 
-#: Normalized country names (PT/EN/FR) -> Wikidata id; avoids "Franca" the Brazilian city.
-COUNTRIES = {
-    "brasil": "Q155", "brazil": "Q155", "bresil": "Q155",
-    "franca": "Q142", "france": "Q142",
-    "ucrania": "Q212", "ukraine": "Q212",
-    "russia": "Q159", "russie": "Q159",
-    "estados unidos": "Q30", "eua": "Q30", "united states": "Q30",
-    "etats-unis": "Q30", "etats unis": "Q30",
-    "alemanha": "Q183", "germany": "Q183", "allemagne": "Q183",
-    "reino unido": "Q145", "united kingdom": "Q145", "royaume-uni": "Q145", "inglaterra": "Q145",
-    "portugal": "Q45", "espanha": "Q29", "spain": "Q29", "espagne": "Q29",
-    "italia": "Q38", "italy": "Q38", "italie": "Q38",
-    "china": "Q148", "chine": "Q148", "japao": "Q17", "japan": "Q17", "japon": "Q17",
-    "india": "Q668", "inde": "Q668", "israel": "Q801", "iran": "Q794",
-    "argentina": "Q414", "argentine": "Q414", "mexico": "Q96", "mexique": "Q96",
-    "canada": "Q16", "venezuela": "Q717", "colombia": "Q739", "colombie": "Q739",
-    "chile": "Q298", "chili": "Q298", "peru": "Q419", "perou": "Q419",
-    "belgica": "Q31", "belgium": "Q31", "belgique": "Q31", "suica": "Q39",
-    "switzerland": "Q39", "suisse": "Q39", "polonia": "Q36", "poland": "Q36", "pologne": "Q36",
-    "turquia": "Q43", "turkey": "Q43", "turquie": "Q43", "angola": "Q916",
-    "mocambique": "Q1029", "mozambique": "Q1029", "argelia": "Q262", "algeria": "Q262",
-    "algerie": "Q262", "marrocos": "Q1028", "morocco": "Q1028", "maroc": "Q1028",
-    "senegal": "Q1041", "africa do sul": "Q258", "south africa": "Q258",
-    "afrique du sud": "Q258", "coreia do sul": "Q884", "south korea": "Q884",
-    "coree du sud": "Q884", "coreia do norte": "Q423", "north korea": "Q423",
-    "coree du nord": "Q423", "palestina": "Q219060", "palestine": "Q219060",
-    "egito": "Q79", "egypt": "Q79", "egypte": "Q79", "arabia saudita": "Q851",
-    "saudi arabia": "Q851", "arabie saoudite": "Q851",
-}  # fmt: skip
 _LANGUAGES = {"pt": "pt,mul,en,fr", "fr": "fr,mul,en,pt", "en": "en,mul,fr,pt"}
 _ROLE_LABELS = {"head_of_state": "Chefe de Estado", "head_of_government": "Chefe de governo"}
 
 
 def countries_in(text: str) -> list[str]:
-    padded = f" {normalize(text)} "
-    found = [qid for name, qid in COUNTRIES.items() if f" {name} " in padded]
-    return list(dict.fromkeys(found))[:3]
+    """Wikidata ids of the countries named in ``text`` (see ``app.connectors.countries``)."""
+    return [wikidata_id(iso) for iso in iso_countries_in(text)]
 
 
 def is_about_office(text: str) -> bool:
@@ -104,7 +76,7 @@ class WikidataConnector(BaseGovConnector):
             return []  # only claims about who holds an office
         languages = _LANGUAGES.get(query.language, _LANGUAGES["pt"])
         countries = countries_in(text)
-        country_words = {name for name in COUNTRIES if f" {name} " in f" {normalize(text)} "}
+        country_words = country_names_in(text)
         candidates = [
             t
             for t in dict.fromkeys([*query.people, *query.keywords])

@@ -42,7 +42,10 @@ meta-análises valem mais que estudos isolados; reportagens (GDELT) só datam fa
 Artigos marcados como retratados não sustentam nenhuma alegação. O Wikidata (kb.wikidata) é \
 base pública colaborativa, NÃO oficial: serve para fatos institucionais básicos (quem ocupa um \
 cargo e desde quando) quando não houver fonte oficial, e a explicação deve dizer que a fonte é \
-não oficial.
+não oficial. Banco Mundial e Eurostat são estatísticas oficiais. Avisos de retratação (Crossref / \
+Retraction Watch) derrubam o estudo citado. Checagens de agências profissionais \
+(factcheck.google) indicam o que jornalistas já verificaram: cite a agência e a classificação, mas \
+prefira os dados oficiais quando existirem.
 5. confidence_score (0.0 a 1.0) mede o quanto as evidências sustentam o veredito.
 6. explanation: síntese no idioma indicado e no estilo do público indicado, citando os \
 dados públicos e os identificadores [E1], [E2] usados. key_points e contradictions seguem as \

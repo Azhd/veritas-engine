@@ -449,3 +449,17 @@
 - **Ainda falhando (externo)**: **GDELT** responde em 13–42 s ou HTTP 429 (sobrecarga do serviço), acima do limite de 8 s do CLAUDE.md; segue best-effort (falha graciosa, pausa de 60 s após erro), como homologado na Fase 2. NOAA teve uma queda passageira numa rodada e voltou (0,3 s).
 - **Desativados por falta de credencial gratuita**: Portal da Transparência, Légifrance, Judilibre (PISTE) e ReliefWeb.
 - **Testes**: 362 passed (novo `tests/test_connector_health.py`). Commit local, sem push.
+
+---
+
+#### Adendo 2026-10-15 (Fase 4): bases públicas confiáveis (pedido do usuário)
+- **Pedido**: "Ajoute les 4 recommandées : Banque mondiale, Google Fact Check (clé optionnelle), Crossref (rétractations) et Eurostat."
+- **Entregue** (23 conectores; 18 sem credencial):
+  - `intl.worldbank` (`international.py`): Banco Mundial para qualquer país citado (desemprego, inflação, população, PIB e crescimento, expectativa de vida, pobreza extrema). Ex. ao vivo: desemprego da Argentina.
+  - `eu.eurostat` (`international.py`): mesmos indicadores para países da UE e para a UE (EU27). Ex.: desemprego da Alemanha.
+  - `science.crossref` (`scholarly.py`): avisos de retratação (editoras + Retraction Watch) quando a afirmação cita um estudo; o título do artigo retratado é consultado e só ficam retratações com ao menos 2 palavras da afirmação (sem contar "estudo", "provou"...). Ao vivo: estudos retratados sobre ivermectina e covid, hidroxicloroquina e covid, e o estudo Séralini (OGM e câncer em ratos, retratado em 2013). Selo vermelho "Artigo retratado" no app. Limite: o artigo de Wakefield (vacina e autismo) não aparece porque seu título não cita vacina nem autismo.
+  - `factcheck.google` (`fact_checks.py`): checagens de agências profissionais; desativado sem `VERITAS_GOOGLE_FACTCHECK_API_KEY` (grátis). A chave vai no header `X-Goog-Api-Key`, nunca na URL (testado).
+  - `countries.py`: tabela única de ~40 países (PT/EN/FR → ISO2 e Wikidata), usada também pelo Wikidata.
+  - App: nova área "Checagens jornalísticas" (3 idiomas). Prompt: Banco Mundial e Eurostat como estatísticas oficiais; retratação derruba o estudo; checagens citadas com agência e classificação.
+- **Verificação ao vivo** (`healthcheck`): Banco Mundial, Eurostat e Crossref OK; Google Fact Check DISABLED (sem chave). Total na rodada: OK 15 · FAIL 2 (GDELT sobrecarregado; Wayback acima de 16 s nesse momento, latência variável de 4 a 20 s do Internet Archive) · DISABLED 5.
+- **Testes**: 385 passed (novo `tests/test_trusted_bases.py`). Commit local, sem push.
