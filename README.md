@@ -17,9 +17,10 @@
   com carimbo (**CONFIRMADO** em verde ou **FALSO** em vermelho) e uma régua de Falso a Verdadeiro.
 - Leve: cada página tem cerca de 130 KB e funciona no celular.
 
-> **Status:** versão **Alpha 1.3** (tag `v1.3.0-alpha`) publicada na `main`: perícia de vídeo, áudio e
-> imagens (Fase 3), páginas em português, inglês e francês e destaque da confiança. Próxima etapa:
-> Fase 4 (relatórios por público).
+> **Status:** a **Fase 4** (relatórios por público: família, jornalismo, direito e pesquisa) está
+> publicada na `main`, com novas bases confiáveis (Banco Mundial, Eurostat, Crossref, Wikidata e Google
+> Fact Check) e a verificação ao vivo das fontes. Última versão marcada: **Alpha 1.3**
+> (`v1.3.0-alpha`). Próxima etapa: Fase 5 (testes completos e release Alpha 1.0).
 
 ---
 
@@ -186,7 +187,7 @@ outras.
 | 1 | Fundação: API, motor de IA "traga sua própria chave" (Gemini, Groq, Ollama, Claude, OpenAI) | Publicada |
 | 2 | Fontes primárias em 7 áreas, modo cidadão sem chave e app web | Publicada (Alpha 1.2) |
 | 3 | Vídeo, áudio e imagens: transcrição com minutagem, metadados EXIF, detecção de IA (C2PA), Docker; páginas PT/EN/FR | Publicada (Alpha 1.3) |
-| 4 | Relatórios por público: família, estudante de jornalismo, área jurídica/acadêmica | Pronta para revisão |
+| 4 | Relatórios por público: família, estudante de jornalismo, área jurídica/acadêmica; novas bases confiáveis | Publicada |
 | 5 | Testes completos e release Alpha 1.0 | Planejada |
 
 O andamento detalhado de cada fase está no [TASK_BOARD.md](TASK_BOARD.md).

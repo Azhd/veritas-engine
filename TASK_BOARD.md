@@ -42,7 +42,7 @@
 | **Fase 1** | **Fundação & Core:** Estrutura FastAPI, Router BYOK multi-provedor (Gemini, Claude, OpenAI, Groq, Ollama) | `PUBLICADA NO GITHUB` | Claude Code |
 | **Fase 2** | **Conectores de Fontes Primárias & App do Cidadão:** Módulos multidisciplinares assíncronos (`br_gov`, `fr_gov`, `science_health`, `legal_justice`, `global_geopolitics`, `climate_environment`, `web_archive`) + Modo Custo Zero + App Web (`app/web/`) | `PUBLICADA NO GITHUB` (Alpha 1.2, `v1.2.0-alpha`) | Claude Code |
 | **Fase 3** | **Pipeline Multimodal & Forense Digital:** Extração de mídia (`yt-dlp` + FFmpeg), transcrição temporal (Whisper), validação C2PA/EXIF e Dockerização + páginas PT/EN/FR e destaque da confiança | `PUBLICADA NO GITHUB` (`main`) | Claude Code |
-| **Fase 4** | **Motor de Contexto e Adaptação de Audiência:** `verdict_engine.py` com relatórios em três modos (`general_family`, `journalism_student`, `law_academic`) | `PRONTO PARA REVISÃO DO ANTIGRAVITY` | Claude Code |
+| **Fase 4** | **Motor de Contexto e Adaptação de Audiência:** `verdict_engine.py` com relatórios em três modos (`general_family`, `journalism_student`, `law_academic`) | `PUBLICADA NO GITHUB` (`main`) | Claude Code |
 | **Fase 5** | **Testes Alfa e Consolidação de Release:** Suíte completa de testes E2E, documentação e empacotamento da release Alpha 1.0 | `BACKLOG` | Claude Code |
 
 ---
@@ -201,7 +201,7 @@
 
 ## 🎯 FASE 4: Motor de Contexto e Adaptação de Audiência
 
-**Status da Fase**: `PRONTO PARA REVISÃO DO ANTIGRAVITY` (branch `feat/fase-4-audiences`, commit local, sem push)
+**Status da Fase**: `PUBLICADA NO GITHUB` (mesclada em `main`; branch `feat/fase-4-audiences` preservada)
 **Responsável**: Claude Code (Engenheiro Executor)
 **Meta**: O mesmo conjunto de fatos e evidências oficiais, sintetizado para três públicos (`general_family`, `journalism_student`, `law_academic`), conforme o CLAUDE.md §2.3 e §4.3. *As tarefas abaixo foram detalhadas pelo Claude Code a partir do roadmap, pois o board não trazia tarefas da Fase 4.*
 
@@ -471,3 +471,15 @@
 - **Correção**: as áreas da IA agora são **somadas** às das regras fixas ("règlement" → jurídico). Reproduzido com triagens simuladas: os 3 cenários (só política / sem área / jurídico) trazem o Regulamento (UE) 2024/1689 em 1º.
 - Séries do Banco Mundial e do Eurostat passam a 7 anos ("desde 2020" precisa de 2020).
 - 386 testes. Commit local, sem push.
+
+---
+
+### 8. Validação do Usuário & Publicação Remota (Fase 4)
+
+- **Status de Publicação**: `PUBLICADA NO GITHUB` na `main` (merge de `feat/fase-4-audiences`, que inclui `feat/qualite-sources`).
+- **Pedido do usuário** (2026-10-15): "Push en version stable et attends le next step", depois de testar localmente com o Groq.
+- **Conteúdo**: modos de audiência (Fase 4), Wikidata (não oficial, confiança limitada sem referência), Banco Mundial, Eurostat, Crossref (retratações), Google Fact Check (chave opcional), verificação ao vivo dos conectores (`app.connectors.healthcheck`), prazo total por fonte, correções de Câmara/Senado/OMS/Wayback/EUR-Lex, áreas da IA somadas às regras fixas, cartão PNG corrigido.
+- **Varredura de segredos**: `.env` ignorado; só `backend/.env.example` (valores vazios) versionado; nenhum padrão de chave nos 9 commits enviados.
+- **Testes**: 386 passed, `ruff` limpo.
+- **Aprovação do Usuário**: [x] SIM | [ ] NÃO
+- **Branch / Repositório Remoto**: `main` → https://github.com/Azhd/veritas-engine · branches preservadas: `feat/qualite-sources`, `feat/fase-4-audiences`. Sem tag nova (última: `v1.3.0-alpha`).
