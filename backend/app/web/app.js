@@ -770,11 +770,7 @@ function renderReport(report) {
   $("forensicsBox").hidden = true;
   $("timelineBox").hidden = true;
   $("sourcesBox").hidden = false;
-  const head = verdictInfo(report.verdict);
-  if (report.verdict === "SEM_DADOS_SUFICIENTES" && report.primary_sources?.length) {
-    head.meaning = t("v_no_data_meaning_sources"); // sources were found, they just don't answer
-  }
-  renderVerdictCard(head, certainty(report));
+  renderVerdictCard(verdictHead(report), certainty(report));
   renderAlerts(report);
   $("claimQuote").textContent = `“${report.claim}”`;
   renderExplanation(report.explanation || "");
@@ -785,6 +781,15 @@ function renderReport(report) {
   renderNotes(report);
   showState("result");
   $("resultState").scrollTop = 0;
+}
+
+/** Verdict label and meaning for a report (also used by the share card). */
+function verdictHead(report) {
+  const head = verdictInfo(report.verdict);
+  if (report.verdict === "SEM_DADOS_SUFICIENTES" && report.primary_sources?.length) {
+    head.meaning = t("v_no_data_meaning_sources"); // sources were found, they just don't answer
+  }
+  return head;
 }
 
 function renderExplanation(text) {
@@ -1465,8 +1470,9 @@ async function copySummary() {
 // Draws a 1080x1350 share card (portrait, ideal for WhatsApp/Instagram) with the verdict.
 function drawShareCard() {
   const report = state.report;
-  const verdict = verdictInfo(report.verdict);
+  const verdict = verdictHead(report);
   const cert = certainty(report);
+  const sources = (report.primary_sources || []).slice(0, 4);
   const tones = {
     true: ["#12875a", "#e3f6ec"], false: ["#d33a3a", "#fdeaea"], warn: ["#c97800", "#fff3df"],
     neutral: ["#5f6b80", "#eef0f5"], info: ["#3b5bdb", "#e9eeff"],
@@ -1493,7 +1499,10 @@ function drawShareCard() {
 
   // verdict block: solid colour when the AI is near certain, soft tint otherwise
   let y = P + 110;
-  const blockHeight = cert ? 250 : 210;
+  const textWidth = W - 2 * P - 80;
+  ctx.font = font(700, 28);
+  const certLines = cert ? Math.min(3, countLines(ctx, cert.text, textWidth)) : 0;
+  const blockHeight = 210 + certLines * 40;
   ctx.fillStyle = strong ? tone : soft; roundRect(ctx, P, y, W - 2 * P, blockHeight, 32); ctx.fill();
   const ink = strong ? "#ffffff" : tone;
   ctx.fillStyle = ink; ctx.font = font(800, 26);
@@ -1503,7 +1512,7 @@ function drawShareCard() {
   ctx.fillText(fit(ctx, verdict.meaning, W - 2 * P - 80), P + 40, y + 185);
   if (cert) {
     ctx.font = font(700, 28);
-    ctx.fillText(fit(ctx, cert.text, W - 2 * P - 80), P + 40, y + 228);
+    wrap(ctx, cert.text, P + 40, y + 228, textWidth, 38, 3);
   }
   y += blockHeight;
 
@@ -1534,13 +1543,18 @@ function drawShareCard() {
 
   // explanation (AI) or hint
   if (report.ai_used && report.explanation) {
+    // the room left once the sources (if any) and the footer are reserved
+    const reserved = sources.length ? 26 + Math.min(sources.length, 2) * 120 : 0;
+    const maxLines = Math.max(3, Math.floor((H - P - 70 - reserved - y) / 42));
     ctx.fillStyle = "#131a2e"; ctx.font = font(500, 30);
-    y = wrap(ctx, stripRefs(report.explanation), P, y, W - 2 * P, 42, cert ? 4 : 5) + 76;
+    y = wrap(ctx, stripRefs(report.explanation), P, y, W - 2 * P, 42, maxLines) + 76;
   }
 
-  // sources
-  ctx.fillStyle = "#6a7488"; ctx.font = font(800, 24); ctx.fillText(t("card_sources"), P, y); y += 26;
-  for (const source of (report.primary_sources || []).slice(0, 4)) {
+  // sources (no heading when there are none)
+  if (sources.length) {
+    ctx.fillStyle = "#6a7488"; ctx.font = font(800, 24); ctx.fillText(t("card_sources"), P, y); y += 26;
+  }
+  for (const source of sources) {
     if (y > H - 220) break;
     ctx.fillStyle = "#f7f8fc"; roundRect(ctx, P, y, W - 2 * P, 104, 20); ctx.fill();
     ctx.fillStyle = "#131a2e"; ctx.font = font(700, 28);
@@ -1569,6 +1583,21 @@ function fit(ctx, text, maxWidth) {
   let cut = text;
   while (cut.length > 1 && ctx.measureText(`${cut}…`).width > maxWidth) cut = cut.slice(0, -1);
   return `${cut.trimEnd()}…`;
+}
+
+function countLines(ctx, text, maxWidth) {
+  let lines = 1;
+  let line = "";
+  for (const word of text.split(/\s+/)) {
+    const test = line ? `${line} ${word}` : word;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      lines += 1;
+      line = word;
+    } else {
+      line = test;
+    }
+  }
+  return lines;
 }
 
 function wrap(ctx, text, x, y, maxWidth, lineHeight, maxLines) {
