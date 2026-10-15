@@ -343,7 +343,9 @@ def enrich_analysis(analysis: ClaimAnalysis, claim: str) -> ClaimAnalysis:
     """Merge deterministic extractions into an (LLM-produced) analysis."""
     urls = list(dict.fromkeys([*analysis.urls, *extract_urls(claim)]))
     refs = [ref.label for ref in parse_legal_references([claim])]
-    domains = list(analysis.domains) or heuristic_domains(claim)
+    # The AI's areas plus the ones our fixed rules see: an open model that files an EU
+    # regulation under 'politics' alone would otherwise never reach EUR-Lex.
+    domains = list(dict.fromkeys([*analysis.domains, *heuristic_domains(claim)]))
     if urls and Domain.WEB_HISTORY not in domains:
         domains.append(Domain.WEB_HISTORY)
     return analysis.model_copy(

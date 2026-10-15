@@ -463,3 +463,11 @@
   - App: nova área "Checagens jornalísticas" (3 idiomas). Prompt: Banco Mundial e Eurostat como estatísticas oficiais; retratação derruba o estudo; checagens citadas com agência e classificação.
 - **Verificação ao vivo** (`healthcheck`): Banco Mundial, Eurostat e Crossref OK; Google Fact Check DISABLED (sem chave). Total na rodada: OK 15 · FAIL 2 (GDELT sobrecarregado; Wayback acima de 16 s nesse momento, latência variável de 4 a 20 s do Internet Archive) · DISABLED 5.
 - **Testes**: 385 passed (novo `tests/test_trusted_bases.py`). Commit local, sem push.
+
+---
+
+#### Adendo 2026-10-15 (Fase 4): áreas da triagem por IA + regras fixas
+- **Teste do usuário com Groq**: "L'Union européenne a adopté en 2024 un règlement sur l'intelligence artificielle" → "Données insuffisantes", 0 fonte (sem IA, o Regulamento 2024/1689 aparecia). Causa reproduzida: o modelo classificou a afirmação só como política; o EUR-Lex (área jurídica) nem era consultado, e as áreas das regras fixas só entravam quando a IA não dava nenhuma.
+- **Correção**: as áreas da IA agora são **somadas** às das regras fixas ("règlement" → jurídico). Reproduzido com triagens simuladas: os 3 cenários (só política / sem área / jurídico) trazem o Regulamento (UE) 2024/1689 em 1º.
+- Séries do Banco Mundial e do Eurostat passam a 7 anos ("desde 2020" precisa de 2020).
+- 386 testes. Commit local, sem push.
