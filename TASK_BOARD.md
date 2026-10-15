@@ -301,8 +301,8 @@
 ### 4. Validação do Usuário & Publicação Remota (Fase 2)
 *(Preenchido após o gatilho de aprovação do usuário)*
 
-- **Status de Publicação**: `PENDENTE`
-- **Instruções de Teste Apresentadas**:
-- **Aprovação do Usuário**: [ ] SIM | [ ] NÃO
-- **Commit Hash**:
-- **Branch / Repositório Remoto**: `feat/fase-2-fontes-primarias` (local, tag `v0.2.0-rc.1`). `main` permanece igual a `origin/main` (Fase 1) até a aprovação; o merge em `main` e o push acontecem após a validação do usuário.
+- **Status de Publicação**: `PUBLICADA NO GITHUB` na branch `feat/fase-2-fontes-primarias` (push pedido explicitamente pelo usuário no chat em 2026-10-15). **Ainda não mesclada em `main`**: o merge em `main` aguarda a validação final do usuário.
+- **Instruções de Teste Apresentadas**: `cd backend` → `.\run.ps1` → abrir `http://127.0.0.1:8000` (app do cidadão) ou `/docs` (API). Passo a passo e solução de problemas no `backend/README.md`.
+- **Aprovação do Usuário**: [x] SIM (push da branch) | [ ] NÃO
+- **Commit Hash**: `f386efe` (com `5a5106c`), tag `v0.2.0-rc.1`
+- **Branch / Repositório Remoto**: https://github.com/Azhd/veritas-engine/tree/feat/fase-2-fontes-primarias · `main` permanece em `a3f9ae0` (Fase 1).
