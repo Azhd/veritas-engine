@@ -12,6 +12,7 @@ from app.api.deps import (
     get_media_check_service,
     get_optional_llm_provider,
 )
+from app.schemas.audience import AudienceMode
 from app.schemas.fact_check import (
     CountryContext,
     FactCheckReport,
@@ -113,6 +114,7 @@ async def fact_check_text(
         notes=selection.notes,
         source_url=body.source_url,
         language=body.language,
+        audience_mode=body.audience_mode,
     )
 
 
@@ -140,6 +142,10 @@ async def fact_check_media(
     language: Annotated[
         ReplyLanguage | None, Form(description="Idioma das explicações (pt, en, fr).")
     ] = None,
+    audience_mode: Annotated[
+        AudienceMode,
+        Form(description="general_family, journalism_student ou law_academic."),
+    ] = AudienceMode.GENERAL_FAMILY,
 ) -> MediaFactCheckReport:
     return await service.check(
         selection.provider,
@@ -149,4 +155,5 @@ async def fact_check_media(
         country=country,
         notes=selection.notes,
         language=language,
+        audience_mode=audience_mode,
     )

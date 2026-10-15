@@ -42,7 +42,7 @@
 | **Fase 1** | **Fundação & Core:** Estrutura FastAPI, Router BYOK multi-provedor (Gemini, Claude, OpenAI, Groq, Ollama) | `PUBLICADA NO GITHUB` | Claude Code |
 | **Fase 2** | **Conectores de Fontes Primárias & App do Cidadão:** Módulos multidisciplinares assíncronos (`br_gov`, `fr_gov`, `science_health`, `legal_justice`, `global_geopolitics`, `climate_environment`, `web_archive`) + Modo Custo Zero + App Web (`app/web/`) | `PUBLICADA NO GITHUB` (Alpha 1.2, `v1.2.0-alpha`) | Claude Code |
 | **Fase 3** | **Pipeline Multimodal & Forense Digital:** Extração de mídia (`yt-dlp` + FFmpeg), transcrição temporal (Whisper), validação C2PA/EXIF e Dockerização + páginas PT/EN/FR e destaque da confiança | `PUBLICADA NO GITHUB` (`main`) | Claude Code |
-| **Fase 4** | **Motor de Contexto e Adaptação de Audiência:** `verdict_engine.py` com relatórios em três modos (`general_family`, `journalism_student`, `law_academic`) | `BACKLOG` | Claude Code |
+| **Fase 4** | **Motor de Contexto e Adaptação de Audiência:** `verdict_engine.py` com relatórios em três modos (`general_family`, `journalism_student`, `law_academic`) | `PRONTO PARA REVISÃO DO ANTIGRAVITY` | Claude Code |
 | **Fase 5** | **Testes Alfa e Consolidação de Release:** Suíte completa de testes E2E, documentação e empacotamento da release Alpha 1.0 | `BACKLOG` | Claude Code |
 
 ---
@@ -196,6 +196,33 @@
 - [x] Garantir 100% de aprovação na suíte de testes (`pytest backend/tests -v`).
 - [x] Atualizar a documentação (pedido do usuário, vale para todas as fases): `README.md` da raiz (como iniciar, o que o app faz, tabela de fases e versões) e `backend/README.md` (rotas, fontes, configuração, estrutura).
 - [x] Atualizar status para `PRONTO PARA REVISÃO DO ANTIGRAVITY`.
+
+---
+
+## 🎯 FASE 4: Motor de Contexto e Adaptação de Audiência
+
+**Status da Fase**: `PRONTO PARA REVISÃO DO ANTIGRAVITY` (branch `feat/fase-4-audiences`, commit local, sem push)
+**Responsável**: Claude Code (Engenheiro Executor)
+**Meta**: O mesmo conjunto de fatos e evidências oficiais, sintetizado para três públicos (`general_family`, `journalism_student`, `law_academic`), conforme o CLAUDE.md §2.3 e §4.3. *As tarefas abaixo foram detalhadas pelo Claude Code a partir do roadmap, pois o board não trazia tarefas da Fase 4.*
+
+### [TASK 4.1] Esquemas de audiência (`schemas/audience.py`)
+- [x] `AudienceMode` (`general_family`, `journalism_student`, `law_academic`) e `AudienceReport` com seções estruturadas (linha do tempo, histórico de arquivo, citações, referências jurídicas, pontos-chave, contradições), renderizáveis em qualquer idioma da página.
+
+### [TASK 4.2] Motor de veredito com adaptação (`engines/verdict_engine.py`)
+- [x] Instruções de estilo por público no prompt do veredito (sem chamada extra de IA); `LLMVerdict` ganha `key_points` e `contradictions` (validação tolerante).
+- [x] Seções determinísticas, sem IA: linha do tempo, histórico da página no Internet Archive, ABNT NBR 6023 e APA 7 (DOI/PMID), nível de evidência (alto / retratado), referências jurídicas.
+- [x] Regra: público nunca altera evidências, veredito nem confiança.
+
+### [TASK 4.3] API
+- [x] `audience_mode` em `POST /api/v1/fact-check/text` (JSON) e `POST /api/v1/fact-check/media` (formulário); padrão `general_family`; `FactCheckReport.audience` também no modo cidadão.
+
+### [TASK 4.4] App do cidadão
+- [x] Seletor "Para quem é a explicação?" (3 cartões, lembrado no aparelho, nos 3 idiomas).
+- [x] Família: quadro "Por que é falso/verdadeiro, em 1 minuto", usado também no texto do WhatsApp. Jornalismo: método OSINT, linha do tempo, contradições, histórico da página, roteiro para refazer. Direito e pesquisa: fundamentos, referências jurídicas, ABNT/APA com botão copiar.
+- [x] Troca de público após o resultado sem nova requisição; botão "Reescrever para este público" quando a explicação da IA foi escrita para outro.
+
+### [TASK 4.5] Testes e handover
+- [x] `tests/test_audience_modes.py` + extensão dos testes de idioma/mídia; documentação; status `PRONTO PARA REVISÃO DO ANTIGRAVITY`.
 
 ---
 
@@ -381,3 +408,19 @@
 - **Brasil em qualquer idioma**: "Brésil"/"Brazil" reconhecidos; o IBGE aceita gatilhos em FR/EN (population, habitants, inhabitants, chômage, unemployment, inflation, prix...). Verificado ao vivo: "Le Brésil compte plus de 200 millions d'habitants" / "Brazil has more than 200 million inhabitants" → população IBGE 2026 = 214.211.951.
 - **Anos citados** (`ClaimAnalysis.years`, `EvidenceQuery.years`), sem confundir com números de lei ou valores.
 - **Testes**: 317 passed (novo `tests/test_source_quality.py`, 17 testes). `ruff` limpo.
+
+---
+
+### 7. Notas de Entrega do Claude Code (Fase 4)
+
+- **Status da Entrega**: `PRONTO PARA REVISÃO DO ANTIGRAVITY`
+- **Data da Entrega**: 2026-10-15
+- **Branch**: `feat/fase-4-audiences`, criada de `feat/qualite-sources` (que traz as melhorias de fontes pós Alpha 1.3, ainda não publicadas). Commits locais, **sem push**.
+- **Arquivos**: novos `app/schemas/audience.py`, `app/engines/verdict_engine.py`, `tests/test_audience_modes.py`; alterados `schemas/fact_check.py` (`audience_mode`, `LLMVerdict.key_points/contradictions`, `FactCheckReport.audience`), `prompt_templates/fact_check.py`, `services/fact_checker.py`, `services/media_checker.py`, `api/v1/fact_check.py`, app web (`index.html`, `app.js`, `styles.css`, `i18n/*.json` com 54 textos novos por idioma), READMEs.
+- **Testes**: **328 passed**, `ruff` limpo.
+- **Verificado**: ao vivo sem IA (FR, "Les vaccins ROR provoquent l'autisme"): referências ABNT/APA corretas com DOI e selo de alto nível de evidência na meta-análise, linha do tempo de 2014 a 2025, troca para Jornalismo sem nova requisição; com resultado de IA simulado: quadro "Pourquoi c'est faux, en 1 minute", texto do WhatsApp com os pontos, aviso de reescrita ao trocar de público; seletor no celular (EN).
+- **Não verificado**: explicações reais da IA nos três estilos (precisa da chave do usuário).
+- **Decisões**:
+  1. Uma única chamada de IA por checagem: o estilo vai no prompt do veredito, e as seções objetivas são calculadas sem IA. Trocar de público reaproveita tudo; só a explicação precisa ser reescrita (nova checagem, sob demanda).
+  2. ABNT segue a convenção brasileira em português ("Disponível em", "Acesso em") e APA em inglês, em qualquer idioma da página, como pedem as normas.
+  3. Não há "modo" no servidor que esconda dados: a resposta traz todas as seções; o público decide o que o app mostra primeiro (auditabilidade).

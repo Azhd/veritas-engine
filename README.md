@@ -108,8 +108,22 @@ Com IA, a **confiança** aparece de três jeitos:
 | **Baixa** (menos de 55%) | Cartão discreto com o aviso "leia as fontes antes de concluir" |
 
 Em todos os casos, uma **régua de Falso a Verdadeiro** mostra onde o veredito ficou. O cartão em
-imagem e a mensagem do WhatsApp também levam o nível de confiança. Dá para enviar o resultado no WhatsApp,
-copiar o resumo ou baixar um cartão em imagem.
+imagem e a mensagem do WhatsApp também levam o nível de confiança. Dá para enviar o resultado no
+WhatsApp, copiar o resumo ou baixar um cartão em imagem.
+
+### Para quem é a explicação? (Fase 4)
+
+Antes de verificar, escolha o público. As fontes, o veredito e a confiança são **os mesmos**; muda
+a forma de explicar e o que aparece abaixo do resumo:
+
+| Público | O que você recebe |
+| --- | --- |
+| **Família** | Linguagem simples e o quadro **"Por que é falso/verdadeiro, em 1 minuto"**, que vai direto na mensagem do WhatsApp |
+| **Jornalismo** | Método da checagem (termos pesquisados, bases consultadas, o que respondeu), **linha do tempo** das fontes, contradições entre fontes, **histórico da página citada** no Internet Archive (mudou? foi apagada?) e um roteiro para refazer a checagem |
+| **Direito e pesquisa** | Fundamentos, **referências jurídicas** (leis, atos da UE com CELEX, teses do STJ) e **referências ABNT e APA** prontas para copiar, com DOI e PMID e o aviso de alto nível de evidência ou de artigo retratado |
+
+Linha do tempo, histórico e referências funcionam **sem IA**. Trocar de público depois do resultado
+muda as seções na hora; o botão "Reescrever para este público" refaz só a explicação da IA.
 
 Para fotos, vídeos e áudios aparecem também:
 
@@ -162,7 +176,7 @@ outras.
 | 1 | Fundação: API, motor de IA "traga sua própria chave" (Gemini, Groq, Ollama, Claude, OpenAI) | Publicada |
 | 2 | Fontes primárias em 7 áreas, modo cidadão sem chave e app web | Publicada (Alpha 1.2) |
 | 3 | Vídeo, áudio e imagens: transcrição com minutagem, metadados EXIF, detecção de IA (C2PA), Docker; páginas PT/EN/FR | Publicada (Alpha 1.3) |
-| 4 | Relatórios por público: família, estudante de jornalismo, área jurídica/acadêmica | Planejada |
+| 4 | Relatórios por público: família, estudante de jornalismo, área jurídica/acadêmica | Pronta para revisão |
 | 5 | Testes completos e release Alpha 1.0 | Planejada |
 
 O andamento detalhado de cada fase está no [TASK_BOARD.md](TASK_BOARD.md).

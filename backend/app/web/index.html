@@ -85,6 +85,18 @@
           <label for="cFR">{{country_fr}}</label>
         </fieldset>
 
+        <fieldset class="audience-picker">
+          <legend class="field-label">{{audience_legend}}</legend>
+          <div class="audience-options">
+            <input type="radio" name="audience" id="aFamily" value="general_family" checked>
+            <label for="aFamily" title="{{aud_general_family_hint}}"><b>{{aud_general_family}}</b><small>{{aud_general_family_hint}}</small></label>
+            <input type="radio" name="audience" id="aJournalism" value="journalism_student">
+            <label for="aJournalism" title="{{aud_journalism_student_hint}}"><b>{{aud_journalism_student}}</b><small>{{aud_journalism_student_hint}}</small></label>
+            <input type="radio" name="audience" id="aLaw" value="law_academic">
+            <label for="aLaw" title="{{aud_law_academic_hint}}"><b>{{aud_law_academic}}</b><small>{{aud_law_academic_hint}}</small></label>
+          </div>
+        </fieldset>
+
         <button class="btn-primary" id="submitBtn" type="submit">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
           <span>{{submit}}</span>
@@ -198,6 +210,8 @@
           <h3>{{summary_title}}</h3>
           <p id="explanation"></p>
         </section>
+
+        <section class="audience" id="audienceBox" hidden></section>
 
         <div class="cta-ai" id="ctaAi" hidden>
           <p><b>{{cta_title}}</b> {{cta_text}}</p>

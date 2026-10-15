@@ -128,6 +128,34 @@ function certainty(report) {
   return { pct, tone, level, text, position: 50 + lean * confidence * 50, strong: level === "strong" };
 }
 
+// ---------------------------------------------------------------- audiences (Phase 4)
+const AUDIENCES = ["general_family", "journalism_student", "law_academic"];
+
+function currentAudience() {
+  const value = document.querySelector('input[name="audience"]:checked')?.value;
+  return AUDIENCES.includes(value) ? value : "general_family";
+}
+
+function restoreAudience() {
+  try {
+    const saved = localStorage.getItem("veritas.audience");
+    const radio = AUDIENCES.includes(saved) && document.querySelector(`input[name="audience"][value="${saved}"]`);
+    if (radio) radio.checked = true;
+  } catch {
+    // storage blocked: the default audience is used
+  }
+}
+
+function onAudienceChange() {
+  try {
+    localStorage.setItem("veritas.audience", currentAudience());
+  } catch {
+    // storage blocked: the choice simply isn't remembered
+  }
+  // Sources, verdict and confidence never change with the reader: re-render, no new request.
+  if (state.report && !state.media) renderAudience(state.report);
+}
+
 // ---------------------------------------------------------------- state & helpers
 const state = {
   ai: null, selected: "gemini", providers: [], report: null, filter: null,
@@ -611,6 +639,7 @@ async function submit(event) {
     if (claim) form.append("claim", claim);
     if (country) form.append("country", country);
     form.append("language", LANG);
+    form.append("audience_mode", currentAudience());
     state.lastRequest = () => runMedia(form);
     await runMedia(form);
     return;
@@ -621,7 +650,7 @@ async function submit(event) {
     $("claim").focus();
     return;
   }
-  const body = { claim, language: LANG };
+  const body = { claim, language: LANG, audience_mode: currentAudience() };
   if (country) body.country = country;
   if (link) body.source_url = link;
   state.lastRequest = () => run(body);
@@ -749,6 +778,7 @@ function renderReport(report) {
   renderAlerts(report);
   $("claimQuote").textContent = `“${report.claim}”`;
   renderExplanation(report.explanation || "");
+  renderAudience(report);
   // The free-AI invitation only makes sense when no AI was configured at all.
   $("ctaAi").hidden = report.ai_used || Boolean(state.ai);
   renderSources();
@@ -870,6 +900,159 @@ function sourceCard(source, index) {
   }, areaIcon(area), body);
 }
 
+// ---------------------------------------------------------------- audience sections
+/** Sections for the chosen reader, all built from the report's own data (no extra request). */
+function renderAudience(report) {
+  const box = $("audienceBox");
+  box.replaceChildren();
+  const audience = report.audience;
+  const mode = currentAudience();
+  if (!audience) {
+    box.hidden = true;
+    return;
+  }
+  // The explanation was written for the audience chosen at check time: offer to rewrite it.
+  if (report.ai_used && audience.mode !== mode) {
+    box.append(el("div", { class: "rewrite" },
+      el("span", { text: t("rewrite_hint") }),
+      el("button", { type: "button", class: "link-btn", text: t("rewrite_button"), onclick: () => submit() })));
+  }
+  if (mode === "general_family") box.append(...familySections(report, audience));
+  else if (mode === "journalism_student") box.append(...journalismSections(report, audience));
+  else box.append(...lawSections(report, audience));
+  box.hidden = box.childElementCount === 0;
+}
+
+function audienceBlock(title, ...content) {
+  return el("div", { class: "aud-block" }, el("h4", { text: title }), ...content);
+}
+
+function familySections(report, audience) {
+  const points = audience.key_points || [];
+  if (!points.length) return [];
+  const tone = VERDICTS[report.verdict]?.tone;
+  const title = { true: t("one_minute_true"), false: t("one_minute_false"), warn: t("one_minute_warn") }[tone] || t("one_minute_other");
+  return [el("div", { class: `one-minute tone-${tone || "neutral"}` },
+    el("h4", { text: title }),
+    el("ul", { class: "key-points" }, points.map((p) => el("li", { text: stripRefs(p) }))))];
+}
+
+function journalismSections(report, audience) {
+  const nodes = [];
+  if (audience.key_points?.length) {
+    nodes.push(el("ul", { class: "key-points" }, audience.key_points.map((p) => el("li", {}, refText(p)))));
+  }
+  // method: what was searched, where, what came back
+  const failed = new Set((report.connector_failures || []).map((f) => f.connector));
+  const sources = report.primary_sources || [];
+  const method = el("ol", { class: "method" },
+    audience.search_terms?.length
+      ? el("li", {}, el("b", { text: t("method_terms") + (LANG === "fr" ? " : " : ": ") }),
+        audience.search_terms.map((term) => el("code", { class: "term", text: term })))
+      : null,
+    el("li", {}, el("b", { text: t("method_sources", { count: (report.connectors_queried || []).length }) }), " ",
+      (report.connectors_queried || []).map((id) => el("span", { class: `term${failed.has(id) ? " failed" : ""}`, text: failed.has(id) ? `${id} (${t("method_failed")})` : id }))),
+    el("li", { text: t("method_evidence", { count: sources.length, cited: sources.filter((s) => s.cited).length }) }),
+    el("li", { text: report.ai_used ? t("method_ai", { model: `${providerName(report.provider)} · ${report.model}` }) : t("method_no_ai") }));
+  nodes.push(audienceBlock(t("method_title"), method));
+  if (audience.contradictions?.length) {
+    nodes.push(audienceBlock(t("contradictions_title"),
+      el("ul", { class: "contradictions" }, audience.contradictions.map((c) => el("li", {}, refText(c))))));
+  }
+  if (audience.timeline?.length) {
+    nodes.push(audienceBlock(t("aud_timeline_title"), el("ol", { class: "aud-timeline" },
+      audience.timeline.map((event) => el("li", { "data-kind": event.kind },
+        el("time", { datetime: event.day, text: formatDate(event.day) || event.day }),
+        el("span", { class: "tl-kind", text: t(`tl_${event.kind}`) }),
+        el("button", { type: "button", class: "ref", text: event.evidence_id, onclick: () => focusSource(event.evidence_id) }),
+        el("span", { class: "tl-title", text: event.title }))))));
+  }
+  for (const page of audience.archive || []) {
+    const facts = [t("archive_counts", { captures: page.captures_inspected, versions: page.distinct_versions })];
+    if (page.removed_or_redirected) facts.push(t("archive_removed"));
+    if (page.title_changed && page.first_title && page.last_title) facts.push(t("archive_title_changed", { first: page.first_title, last: page.last_title }));
+    if (page.content_changed) facts.push(t("archive_changed"));
+    if (!page.content_changed && !page.removed_or_redirected) facts.push(t("archive_stable"));
+    nodes.push(audienceBlock(t("archive_title"), el("p", { class: "archive-url", text: page.url }),
+      el("ul", {}, facts.map((f) => el("li", { text: f })))));
+  }
+  nodes.push(audienceBlock(t("redo_title"), el("ol", { class: "redo" },
+    ["redo_1", "redo_2", "redo_3", "redo_4"].map((key) => el("li", { text: t(key) })))));
+  return nodes;
+}
+
+function lawSections(report, audience) {
+  const nodes = [];
+  if (audience.key_points?.length) {
+    nodes.push(audienceBlock(t("basis_title"),
+      el("ul", { class: "key-points" }, audience.key_points.map((p) => el("li", {}, refText(p))))));
+  }
+  if (audience.legal_references?.length) {
+    nodes.push(audienceBlock(t("legal_refs_title"), legalList(audience.legal_references)));
+  }
+  if (audience.contradictions?.length) {
+    nodes.push(audienceBlock(t("contradictions_title"),
+      el("ul", { class: "contradictions" }, audience.contradictions.map((c) => el("li", {}, refText(c))))));
+  }
+  const citations = audience.citations || [];
+  if (citations.length) nodes.push(referencesBlock(citations));
+  return nodes;
+}
+
+function legalList(references) {
+  return el("ul", { class: "legal-refs" }, references.map((ref) => {
+    const link = safeUrl(ref.url);
+    return el("li", {},
+      el("span", { class: "legal-kind", text: t(`legal_kind_${ref.kind}`) }),
+      el("b", { text: ref.value }),
+      ref.cited ? el("span", { class: "cited", text: t("cited") }) : null,
+      link ? el("a", { href: link, target: "_blank", rel: "noopener noreferrer", text: ref.title }) : el("span", { text: ref.title }));
+  }));
+}
+
+function referencesBlock(citations) {
+  let style = "abnt";
+  const list = el("ol", { class: "references" });
+  const draw = () => {
+    list.replaceChildren(...citations.map((c) => el("li", {},
+      el("button", { type: "button", class: "ref", text: c.evidence_id, onclick: () => focusSource(c.evidence_id) }),
+      el("span", { class: "ref-text", text: c[style] }),
+      c.level ? el("span", { class: `level ${c.level}`, text: t(c.level === "retracted" ? "level_retracted" : "level_high") }) : null,
+      el("button", { type: "button", class: "ghost copy-ref", text: t("copy_ref"), onclick: () => copyText(c[style]) }))));
+  };
+  const switcher = el("div", { class: "ref-style", role: "group" },
+    ["abnt", "apa"].map((key) => el("button", {
+      type: "button", "aria-pressed": String(key === style), text: key.toUpperCase(),
+      onclick: (event) => {
+        style = key;
+        switcher.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === event.currentTarget)));
+        draw();
+      },
+    })),
+    el("button", { type: "button", class: "ghost", text: t("copy_all_refs"), onclick: () => copyText(citations.map((c) => c[style]).join("\n\n")) }));
+  draw();
+  return audienceBlock(t("refs_title"), switcher, list);
+}
+
+/** Text with clickable [E1] markers. */
+function refText(text) {
+  return String(text || "").split(/(\[E\d+\])/g).filter(Boolean).map((part) => {
+    const match = part.match(/^\[(E\d+)\]$/);
+    return match
+      ? el("button", { type: "button", class: "ref", text: match[1], onclick: () => focusSource(match[1]) })
+      : part;
+  });
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(t("ref_copied"));
+  } catch {
+    toast(t("copy_fail"));
+  }
+}
+
 // ---------------------------------------------------------------- media report
 /** The checks behind the media headline: the worst verdict, and the surest check with it. */
 function worstCheck(checks) {
@@ -921,6 +1104,7 @@ function renderMediaReport(data) {
   const transcriptTip = (data.notes || []).some((n) => TRANSCRIPT_PREFIXES.some((p) => n.startsWith(p)));
   $("ctaAi").hidden = data.ai_used || Boolean(state.ai) || transcriptTip;
 
+  $("audienceBox").hidden = true; // each claim of the media has its own sections below
   renderForensics(f);
   renderTimeline(data.checks || []);
   $("sourcesBox").hidden = true;
@@ -1058,6 +1242,10 @@ function timelineDetail(report) {
   const cert = certainty(report);
   if (cert) nodes.push(el("p", { class: `tl-certainty tone-${cert.tone || "neutral"}`, text: cert.text }));
   nodes.push(el("p", { class: "tl-explanation", text: stripRefs(report.explanation) }));
+  const points = report.audience?.key_points || [];
+  if (points.length) nodes.push(el("ul", { class: "key-points" }, points.map((p) => el("li", { text: stripRefs(p) }))));
+  const laws = report.audience?.legal_references || [];
+  if (laws.length) nodes.push(legalList(laws.slice(0, 3)));
   const sources = (report.primary_sources || []).slice(0, 3);
   if (sources.length) {
     nodes.push(el("ol", { class: "source-list" }, sources.map((s, i) => sourceCard(s, i))));
@@ -1247,7 +1435,9 @@ function shareText() {
     `${verdict.emoji} *${verdict.label}*${confidenceSuffix(report)}`,
     `“${report.claim.slice(0, 280)}”`,
     "",
-    report.ai_used ? stripRefs(report.explanation).slice(0, 600) : verdict.meaning,
+    report.audience?.key_points?.length && report.audience.mode === "general_family"
+      ? report.audience.key_points.map((p) => `• ${stripRefs(p)}`).join("\n")
+      : report.ai_used ? stripRefs(report.explanation).slice(0, 600) : verdict.meaning,
     "",
     t("share_sources"),
   ];
@@ -1429,6 +1619,8 @@ async function downloadImage() {
 function init() {
   renderAreas();
   renderExamples();
+  restoreAudience();
+  document.querySelectorAll('input[name="audience"]').forEach((radio) => radio.addEventListener("change", onAudienceChange));
   restoreAi();
   loadProviders();
   setAiStatus();

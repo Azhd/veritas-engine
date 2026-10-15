@@ -131,6 +131,29 @@ responderam.
 homologadas: downloads em lote (STJ, Copernicus) usam `VERITAS_DATASET_TIMEOUT_SECONDS` (30 s) e
 cache longo; GDELT e Wayback são best-effort (GDELT com intervalo mínimo de 5,5 s entre chamadas).
 
+## Públicos (`audience_mode`, Fase 4)
+
+`app/engines/verdict_engine.py` adapta a mesma checagem a três leitores, sem mudar evidências,
+veredito nem confiança:
+
+- **Estilo da IA**: `audience_instructions(mode)` entra no prompt do veredito (nenhuma chamada extra
+  de IA, importante nos planos grátis). O modelo devolve também `key_points` (até 3) e
+  `contradictions`, validados de forma tolerante.
+- **Seções determinísticas** (`build_audience_report`, também no modo cidadão): linha do tempo das
+  fontes (publicação, texto legal, dado oficial, 1ª/última captura no Internet Archive), histórico
+  da página citada (versões, título alterado, removida), referências **ABNT NBR 6023** e **APA 7**
+  com DOI/PMID, nível de evidência (PubMed: revisão sistemática/meta-análise/ECR ou retratado) e
+  referências jurídicas (norma, CELEX, tema do STJ, proposição, matéria, Légifrance, pourvoi).
+- **Resposta**: `FactCheckReport.audience` (`app/schemas/audience.py`) traz todas as seções e o
+  `mode` para o qual a explicação foi escrita. O app mostra as seções do público escolhido e troca
+  de público sem nova requisição.
+
+| Modo | Explicação | Seções no app |
+| --- | --- | --- |
+| `general_family` (padrão) | Simples, parágrafos curtos | "Por que é falso/verdadeiro, em 1 minuto" (também no WhatsApp) |
+| `journalism_student` | Raciocínio OSINT, datas, o que falta confirmar | Método, linha do tempo, contradições, histórico da página, roteiro para refazer |
+| `law_academic` | Técnica: normas, CELEX, tipo de estudo, PMID/DOI | Fundamentos, referências jurídicas, ABNT/APA com cópia |
+
 ## Perícia multimodal (`app/forensics/`)
 
 | Módulo | Função |
@@ -156,7 +179,7 @@ cd backend
 .venv/Scripts/ruff check . && .venv/Scripts/ruff format --check .
 ```
 
-298 testes; nenhum faz chamadas de rede reais (SDKs e APIs públicas são mockados). Os testes de
+328 testes; nenhum faz chamadas de rede reais (SDKs e APIs públicas são mockados). Os testes de
 mídia (`tests/test_media_forensics.py`) usam um FFmpeg falso e imagens geradas na hora; os de C2PA
 assinam JPEGs com uma cadeia de certificados descartável e são pulados se o `c2pa-python` não estiver
 instalado.
@@ -198,8 +221,8 @@ curl -X POST http://127.0.0.1:8000/api/v1/fact-check/media \
 
 | Rota | Descrição |
 | --- | --- |
-| `POST /api/v1/fact-check/text` | Checagem (`claim`, `country`, `source_url` e `language` = `pt`/`en`/`fr` opcionais); sem IA devolve `SEM_CHAVE_IA_DADOS_BRUTOS` |
-| `POST /api/v1/fact-check/media` | Multipart: `file` (até 50 MB) **ou** `url`, mais `claim`, `country` e `language` opcionais. Devolve `forensics` (laudo) e `checks` (afirmações com minutagem e o relatório de cada uma) |
+| `POST /api/v1/fact-check/text` | Checagem (`claim`, `country`, `source_url` `language` = `pt`/`en`/`fr` e `audience_mode` opcionais); sem IA devolve `SEM_CHAVE_IA_DADOS_BRUTOS` |
+| `POST /api/v1/fact-check/media` | Multipart: `file` (até 50 MB) **ou** `url`, mais `claim`, `country`, `language` e `audience_mode` opcionais. Devolve `forensics` (laudo) e `checks` (afirmações com minutagem e o relatório de cada uma) |
 | `GET /api/v1/media/capabilities` | Ferramentas de mídia disponíveis, o que dá para analisar e o que falta instalar |
 | `POST /api/v1/byok/test` | Testa a chave/modelo informados nos headers (`{ok, provider, model, message}`) |
 | `GET /api/v1/byok/providers` | Provedores (gratuitos primeiro) com o passo a passo para obter a chave |
@@ -225,7 +248,8 @@ app/
 ├── core/                       # config (pydantic-settings, prefixo VERITAS_), erros → HTTP
 ├── api/deps.py                 # provedor BYOK opcional por requisição (criado e descartado)
 ├── api/v1/                     # fact_check.py (/text, /media), connectors.py, byok.py, media.py
-├── engines/                    # base.py (BaseLLMProvider), factory.py, providers/, prompt_templates/
+├── engines/                    # base.py (BaseLLMProvider), factory.py, providers/, prompt_templates/,
+│                               # verdict_engine.py (públicos: estilo + seções)
 ├── connectors/                 # base.py, br_gov, fr_gov, legal_justice, science_health,
 │                               # global_geopolitics, climate_environment, web_archive,
 │                               # piste (OAuth), registry

@@ -36,6 +36,8 @@ from app.engines.prompt_templates.fact_check import (
     build_claim_analysis_prompt,
     build_verdict_prompt,
 )
+from app.engines.verdict_engine import build_audience_report
+from app.schemas.audience import AudienceMode
 from app.schemas.evidence import DEFAULT_DOMAINS, Country, Domain, Evidence, EvidenceQuery
 from app.schemas.fact_check import (
     ASSERTIVE_VERDICTS,
@@ -96,8 +98,13 @@ class FactCheckService:
         notes: list[str] | None = None,
         source_url: str | None = None,
         language: str | None = None,
+        audience_mode: AudienceMode = AudienceMode.GENERAL_FAMILY,
     ) -> FactCheckReport:
-        """``language`` (pt/en/fr) is the reader's language; defaults to the claim's."""
+        """``language`` (pt/en/fr) is the reader's language; defaults to the claim's.
+
+        ``audience_mode`` only changes how the explanation is written and which sections the app
+        shows first; evidence, verdict and confidence are the same for every reader.
+        """
         notes = list(notes or [])
 
         # 2. context + search terms
@@ -126,13 +133,13 @@ class FactCheckService:
         numbered = [(f"E{i}", item) for i, item in enumerate(evidence, start=1)]
         if llm is None:
             return self._citizen_report(
-                claim, analysis, numbered, queried, failures, notes, reply_language
+                claim, analysis, numbered, queried, failures, notes, reply_language, audience_mode
             )
 
         # 4 + 5. grounded verdict
         try:
             llm_verdict = await llm.generate_structured(
-                build_verdict_prompt(claim, numbered, reply_language),
+                build_verdict_prompt(claim, numbered, reply_language, audience_mode),
                 LLMVerdict,
                 system_instruction=VERDICT_SYSTEM,
                 temperature=0.0,
@@ -140,7 +147,7 @@ class FactCheckService:
         except AI_FAILURES as exc:
             notes.append(_ai_failure_note(exc))
             return self._citizen_report(
-                claim, analysis, numbered, queried, failures, notes, reply_language
+                claim, analysis, numbered, queried, failures, notes, reply_language, audience_mode
             )
 
         # 6. auditable report (only sources actually retrieved can appear)
@@ -177,6 +184,14 @@ class FactCheckService:
             provider=llm.name.value,
             model=llm.model,
             notes=notes,
+            audience=build_audience_report(
+                audience_mode,
+                numbered,
+                cited=cited,
+                search_terms=[*analysis.keywords, *analysis.keywords_en],
+                key_points=llm_verdict.key_points,
+                contradictions=llm_verdict.contradictions,
+            ),
         )
 
     # ------------------------------------------------------------------ steps
@@ -277,6 +292,7 @@ class FactCheckService:
         failures: list[ConnectorFailure],
         notes: list[str],
         language: str,
+        audience_mode: AudienceMode = AudienceMode.GENERAL_FAMILY,
     ) -> FactCheckReport:
         notes.append(FREE_KEYS_HINT)
         return FactCheckReport(
@@ -294,6 +310,12 @@ class FactCheckService:
             provider="nenhum",
             model="nenhum",
             notes=notes,
+            # timeline, references and laws need no AI: the citizen mode gets them too
+            audience=build_audience_report(
+                audience_mode,
+                numbered,
+                search_terms=[*analysis.keywords, *analysis.keywords_en],
+            ),
         )
 
 

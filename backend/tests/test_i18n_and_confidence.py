@@ -155,12 +155,18 @@ def test_media_route_forwards_the_language():
     app.dependency_overrides[get_media_check_service] = RecordingService
     with TestClient(app) as client:
         ok = client.post(
-            "/api/v1/fact-check/media", data={"url": "https://x.example/a.mp4", "language": "fr"}
+            "/api/v1/fact-check/media",
+            data={
+                "url": "https://x.example/a.mp4",
+                "language": "fr",
+                "audience_mode": "journalism_student",
+            },
         )
         bad = client.post(
             "/api/v1/fact-check/media", data={"url": "https://x.example/a.mp4", "language": "de"}
         )
     assert ok.status_code == 200 and received["language"] == "fr"
+    assert received["audience_mode"] == "journalism_student"
     assert bad.status_code == 422
 
 

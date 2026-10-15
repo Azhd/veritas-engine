@@ -68,7 +68,8 @@ _STOPWORDS = _PT_WORDS | _FR_WORDS | _EN_STOPWORDS | {
     "viral", "whatsapp", "facebook", "instagram", "tiktok", "youtube", "twitter", "pessoas",
     "gente", "agora", "hoje", "ontem", "semana", "segunda", "terca", "quarta", "quinta",
     "sexta", "sabado", "domingo", "feira", "partir", "vao", "sera", "serao", "ainda",
-    "photos", "images", "reseaux", "sociaux", "montrent", "affirment",
+    "photos", "images", "reseaux", "sociaux", "montrent", "affirment", "chez", "provoquent",
+    "provoque",
     "confirmando", "confirma", "confirmou", "divulgou", "divulga", "relatorio",
     "relatorios", "ultimos", "ultimas", "observatorio", "consecutivos",
 }  # fmt: skip
