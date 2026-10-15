@@ -5,11 +5,28 @@ from __future__ import annotations
 import importlib.util
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
+import groq
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.config import ProviderName
+from app.core.errors import ProviderRateLimitError
+from app.engines.base import TranscriptionResult
+from app.engines.providers.gemini_provider import GeminiProvider
+from app.engines.providers.groq_provider import GroqProvider
+from app.engines.providers.openai_provider import OpenAIProvider
 from app.forensics import tools
+from app.forensics.audio_transcriber import (
+    LocalWhisperTranscriber,
+    NoTranscriber,
+    ProviderTranscriber,
+    build_transcriber,
+    extract_timed_claims,
+)
 from app.forensics.c2pa_validator import C2paValidator, interpret_manifest_store
 from app.forensics.media_inspector import (
     MediaError,
@@ -28,8 +45,17 @@ from app.schemas.forensics import (
     MediaKind,
     ToolStatus,
     Transcript,
+    TranscriptSegment,
 )
-from tests.conftest import make_settings
+from tests.conftest import FakeLLMProvider, fake_credentials, make_settings
+
+
+def _sdk_status_error(sdk, cls_name: str, status: int) -> Exception:
+    request = httpx.Request("POST", "https://api.example/v1")
+    return getattr(sdk, cls_name)(
+        "boom", response=httpx.Response(status, request=request), body=None
+    )
+
 
 # =============================================================== 3.1 tool detection
 
@@ -355,3 +381,148 @@ def test_c2pa_interpretation_without_the_native_library():
     assert report.ai_tool == "Adobe_Firefly"
     assert "Assinado por Adobe Inc." in report.summary
     assert "lista de confiança" not in report.summary
+
+
+# =============================================================== 3.4 transcription
+class _GroqAudioClient:
+    """Mimics groq/openai ``audio.transcriptions.create`` (verbose_json)."""
+
+    def __init__(self, fail_first_with=None):
+        self.calls = []
+        self.fail_first_with = fail_first_with
+        self.audio = SimpleNamespace(transcriptions=SimpleNamespace(create=self.create))
+
+    async def create(self, **kwargs):
+        self.calls.append(kwargs)
+        if self.fail_first_with is not None and len(self.calls) == 1:
+            raise self.fail_first_with
+        return SimpleNamespace(
+            language="portuguese",
+            text="Olá. A inflação passou de 10%.",
+            segments=[
+                {"start": 0.0, "end": 1.2, "text": " Olá. "},
+                {"start": 61.5, "end": 64.0, "text": " A inflação passou de 10%."},
+            ],
+        )
+
+
+async def test_groq_whisper_request_and_segments():
+    client = _GroqAudioClient()
+    provider = GroqProvider(fake_credentials(provider=ProviderName.GROQ), client=client)
+    assert provider.supports_audio
+    result = await provider.transcribe_audio(b"mp3", "audio.mp3", "audio/mpeg")
+    call = client.calls[0]
+    assert call["model"] == "whisper-large-v3-turbo"
+    assert call["response_format"] == "verbose_json"
+    assert call["timestamp_granularities"] == ["segment"]
+    assert call["file"] == ("audio.mp3", b"mp3", "audio/mpeg")
+    assert result.segments == [(0.0, 1.2, "Olá."), (61.5, 64.0, "A inflação passou de 10%.")]
+    assert result.model == "whisper-large-v3-turbo"
+
+
+async def test_groq_whisper_falls_back_to_next_model():
+    not_found = _sdk_status_error(groq, "NotFoundError", 404)
+    client = _GroqAudioClient(fail_first_with=not_found)
+    provider = GroqProvider(fake_credentials(provider=ProviderName.GROQ), client=client)
+    result = await provider.transcribe_audio(b"mp3", "a.mp3", "audio/mpeg")
+    assert [c["model"] for c in client.calls] == ["whisper-large-v3-turbo", "whisper-large-v3"]
+    assert result.model == "whisper-large-v3"
+
+
+def test_custom_openai_endpoints_do_not_claim_audio():
+    provider = OpenAIProvider(
+        fake_credentials(endpoint_url="http://localhost:8000/v1"), client=MagicMock()
+    )
+    assert provider.supports_audio is False
+
+
+async def test_gemini_transcription_parses_json_segments():
+    client = MagicMock()
+    client.aio.models.generate_content = AsyncMock(
+        return_value=SimpleNamespace(
+            text='{"language": "pt", "segments": [{"start": 3, "end": 9.5, "text": "Bom dia"}]}'
+        )
+    )
+    provider = GeminiProvider(fake_credentials(provider=ProviderName.GEMINI), client=client)
+    result = await provider.transcribe_audio(b"mp3", "a.mp3", "audio/mpeg")
+    assert result.segments == [(3.0, 9.5, "Bom dia")]
+    contents = client.aio.models.generate_content.await_args.kwargs["contents"]
+    assert contents[0].inline_data.mime_type == "audio/mpeg"
+
+
+class _AudioProvider(FakeLLMProvider):
+    name = ProviderName.GROQ
+    supports_audio = True
+
+    def __init__(self, segments=None, error=None):
+        super().__init__(fake_credentials(provider=ProviderName.GROQ))
+        self.segments = segments or [(1.0, 4.0, "Texto")]
+        self.error = error
+        self.received = None
+
+    async def transcribe_audio(self, audio, filename, mime_type, language=None):
+        self.received = (filename, mime_type)
+        if self.error:
+            raise self.error
+        return TranscriptionResult(segments=self.segments, language="pt", model="whisper-x")
+
+
+async def test_provider_transcriber_compresses_and_maps_segments(tmp_path, monkeypatch):
+    wav = tmp_path / "audio.wav"
+    wav.write_bytes(b"RIFF" + b"\0" * 100)
+    monkeypatch.setattr(
+        "app.forensics.audio_transcriber.compress_for_upload",
+        lambda path: (path.with_suffix(".mp3").write_bytes(b"ID3"), path.with_suffix(".mp3"))[1],
+    )
+    provider = _AudioProvider(segments=[(5.0, 2.0, "fim antes do início"), (8.0, 9.0, "ok")])
+    transcript = await ProviderTranscriber(provider).transcribe(wav, 10.0)
+    assert provider.received == ("audio.mp3", "audio/mpeg")
+    assert transcript.engine == "groq_whisper"
+    assert [(s.start_time, s.end_time) for s in transcript.segments] == [(5.0, 5.0), (8.0, 9.0)]
+    assert transcript.segments[1].label == "00:08"
+
+
+async def test_provider_transcriber_failure_becomes_a_note(tmp_path):
+    wav = tmp_path / "audio.wav"
+    wav.write_bytes(b"RIFF")
+    provider = _AudioProvider(error=ProviderRateLimitError("groq: rate limit or quota exceeded."))
+    transcript = await ProviderTranscriber(provider).transcribe(wav, 3.0)
+    assert transcript.segments == [] and "rate limit" in transcript.note
+
+
+def test_transcriber_selection_is_free_tier_first():
+    caps_none = _caps()()
+    caps_local = _caps(**{"faster-whisper": True})()
+    settings = make_settings()
+    assert isinstance(build_transcriber(_AudioProvider(), settings, caps_none), ProviderTranscriber)
+    no_audio = FakeLLMProvider(fake_credentials())  # e.g. Claude/Ollama: no audio input
+    assert isinstance(build_transcriber(no_audio, settings, caps_local), LocalWhisperTranscriber)
+    fallback = build_transcriber(None, settings, caps_none)
+    assert isinstance(fallback, NoTranscriber) and "Groq" in fallback.note
+
+
+async def test_timed_claims_with_ai_and_heuristic_fallback():
+    transcript = Transcript(
+        engine="t",
+        segments=[
+            TranscriptSegment(start_time=0, end_time=2, text="Boa noite a todos."),
+            TranscriptSegment(
+                start_time=83, end_time=90, text="A inflação do Brasil passou de 10% este ano."
+            ),
+        ],
+    )
+    heuristic = await extract_timed_claims(transcript, None)
+    assert [(c.label, c.claim) for c in heuristic] == [
+        ("01:23", "A inflação do Brasil passou de 10% este ano.")
+    ]
+    llm = FakeLLMProvider(
+        fake_credentials(),
+        [
+            '{"claims": [{"start_time": 83, "claim": "A inflação no Brasil passou de 10% '
+            'em 2026.", "quote": "passou de 10%"}]}'
+        ],
+    )
+    claims = await extract_timed_claims(transcript, llm)
+    assert claims[0].claim == "A inflação no Brasil passou de 10% em 2026."
+    assert "[83.0s] A inflação" in llm.calls[0]["prompt"]
+    assert await extract_timed_claims(Transcript(engine="t"), llm) == []

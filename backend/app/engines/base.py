@@ -25,6 +25,15 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
+class TranscriptionResult:
+    """Provider-neutral transcription: ``segments`` are (start_seconds, end_seconds, text)."""
+
+    segments: list[tuple[float, float, str]]
+    language: str | None = None
+    model: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ProviderCredentials:
     """Transient, per-request credentials. ``repr`` never exposes the key."""
 
@@ -46,6 +55,9 @@ class BaseLLMProvider(ABC):
     requires_api_key: ClassVar[bool] = True
     supports_custom_endpoint: ClassVar[bool] = False
 
+    #: Whether ``transcribe_audio`` is implemented (Whisper API or native audio input).
+    supports_audio: ClassVar[bool] = False
+
     #: How many times ``generate_structured`` re-asks the model after an invalid JSON answer.
     structured_retries: ClassVar[int] = 1
 
@@ -65,6 +77,12 @@ class BaseLLMProvider(ABC):
     @property
     def model(self) -> str:
         return self._model_override or self.credentials.model
+
+    async def transcribe_audio(
+        self, audio: bytes, filename: str, mime_type: str, language: str | None = None
+    ) -> TranscriptionResult:
+        """Timestamped transcription of a (compressed) audio file. Only when ``supports_audio``."""
+        raise NotImplementedError(f"{self.name} does not transcribe audio")
 
     async def list_models(self) -> list[str]:
         """Model ids available to this key; providers that cannot list return an empty list."""
