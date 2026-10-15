@@ -1,0 +1,22 @@
+# Veritas Engine - one command to run everything with full media forensics:
+#   docker compose up --build
+# then open http://localhost:8000
+services:
+  backend:
+    build: ./backend
+    image: veritas-engine:alpha
+    ports:
+      - "8000:8000"
+    # Optional settings (AI fallback keys, source credentials). Missing file is fine.
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      VERITAS_MEDIA_TMP_DIR: /tmp/veritas-media
+    volumes:
+      # Temporary media (uploads/downloads); files are deleted after each analysis.
+      - veritas-media:/tmp/veritas-media
+    restart: unless-stopped
+
+volumes:
+  veritas-media:

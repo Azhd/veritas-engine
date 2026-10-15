@@ -133,12 +133,13 @@
 ---
 
 ### [TASK 3.1] Ambiente de Execução & Containerização (FFmpeg, ExifTool, Docker)
-- [ ] Criar `backend/Dockerfile` multi-stage:
+- [x] Criar `backend/Dockerfile` multi-stage:
   - Base Python 3.11+ slim.
   - Instalação das ferramentas de sistema: `ffmpeg`, `exiftool`, `libmagic`.
   - Instalação de dependências Python (`requirements.txt` + `yt-dlp`, `c2pa-python`).
-- [ ] Criar `docker-compose.yml` na raiz com o backend e volume temporário de mídia.
-- [ ] Adicionar helper no backend checando a disponibilidade de `ffmpeg` e `exiftool` no SO com logs claros e graceful degradation caso ausentes em ambiente Windows/bare-metal.
+- [x] Criar `docker-compose.yml` na raiz com o backend e volume temporário de mídia.
+- [x] Adicionar helper no backend checando a disponibilidade de `ffmpeg` e `exiftool` no SO com logs claros e graceful degradation caso ausentes em ambiente Windows/bare-metal.
+  - *Claude Code*: `app/forensics/tools.py` + `GET /api/v1/media/capabilities`. FFmpeg do sistema ou embutido via `imageio-ffmpeg`; EXIF de imagem via Pillow quando não há ExifTool. Dependências pesadas (`c2pa-python` ~300 MB no Windows, `imageio-ffmpeg`) ficam em `requirements-media.txt` (`.un.ps1 -Full`); Whisper offline em `requirements-whisper.txt` (`.un.ps1 -Whisper`). **Dockerfile/compose não foram construídos nesta máquina (Docker ausente).**
 
 ---
 

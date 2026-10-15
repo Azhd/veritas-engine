@@ -8,6 +8,14 @@ python-dotenv>=1.0
 truststore>=0.9  # OS trust store for TLS (gov servers with incomplete cert chains)
 defusedxml>=0.7  # safe parsing of untrusted XML (PubMed efetch)
 
+# --- Media (light, always installed) ---
+python-multipart>=0.0.9  # file uploads (POST /api/v1/fact-check/media)
+Pillow>=10.0  # image EXIF when ExifTool is not installed
+yt-dlp>=2025.1  # download media from links (YouTube, TikTok, X...)
+
+# Full forensics (bundled FFmpeg + C2PA, ~400 MB on Windows): requirements-media.txt
+# Offline transcription (Whisper on this computer): requirements-whisper.txt
+
 # --- BYOK LLM provider SDKs ---
 google-genai>=1.0
 anthropic>=0.40
