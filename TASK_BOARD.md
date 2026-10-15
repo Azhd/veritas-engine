@@ -373,3 +373,11 @@
 - **Varredura de segredos**: `.env` ignorado pelo `.gitignore`; só `backend/.env.example` (valores vazios) é versionado; nenhum padrão de chave (`gsk_`, `AIza`, `sk-ant-`, `sk-proj-`) nos commits enviados. A chave do usuário fica só no navegador/`.env` local.
 - **Aprovação do Usuário**: [x] SIM | [ ] NÃO
 - **Branch / Repositório Remoto**: `main` → https://github.com/Azhd/veritas-engine · branches preservadas: `feat/fase-3-forense-multimodal`, `feat/multilingue-confiance`.
+
+---
+
+#### Adendo 2026-10-15 (pós Alpha 1.3): qualidade das fontes (branch `feat/qualite-sources`, commit local, sem push)
+- **EUR-Lex**: o ano citado ("adotado em 2024") e o tipo de ato (diretiva / regulamento / decisão, em PT/FR/EN) restringem a busca primeiro e são relaxados se nada aparecer; os resultados são reordenados (ato do ano citado → leis do Parlamento e do Conselho → retificações/atos de execução por último), pois a ordem por data colocava emendas recentes antes do ato original. A sigla "AI"/"IA" (só em maiúsculas: "ia" é verbo em português) vira "artificial intelligence". Afirmação que fala da Europa consulta o EUR-Lex mesmo com país BR, e ele vem primeiro. Verificado ao vivo: o AI Act (Regulamento (UE) 2024/1689) aparece em 1º nas afirmações em PT, EN e FR; a Diretiva 2019/790 continua em 1º/2º.
+- **Brasil em qualquer idioma**: "Brésil"/"Brazil" reconhecidos; o IBGE aceita gatilhos em FR/EN (population, habitants, inhabitants, chômage, unemployment, inflation, prix...). Verificado ao vivo: "Le Brésil compte plus de 200 millions d'habitants" / "Brazil has more than 200 million inhabitants" → população IBGE 2026 = 214.211.951.
+- **Anos citados** (`ClaimAnalysis.years`, `EvidenceQuery.years`), sem confundir com números de lei ou valores.
+- **Testes**: 317 passed (novo `tests/test_source_quality.py`, 17 testes). `ruff` limpo.

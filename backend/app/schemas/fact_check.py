@@ -87,6 +87,7 @@ class TextFactCheckRequest(BaseModel):
 
 # ---------------------------------------------------------------- LLM intermediate outputs
 _LIST_LIMITS = {
+    "years": 4,
     "keywords": 8,
     "keywords_en": 8,
     "people": 5,
@@ -124,6 +125,7 @@ class ClaimAnalysis(BaseModel):
     topics: list[str] = Field(default_factory=list, max_length=5)
     topics_en: list[str] = Field(default_factory=list, max_length=5)
     legal_references: list[str] = Field(default_factory=list, max_length=5)
+    years: list[str] = Field(default_factory=list, max_length=4, description="Years cited.")
     urls: list[str] = Field(default_factory=list, max_length=5)
     language: str = Field(default="pt", description="ISO 639-1 language of the claim.")
 

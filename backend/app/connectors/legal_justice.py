@@ -269,7 +269,9 @@ _CELEX_TYPES = {"R": "Regulamento", "L": "Diretiva", "D": "Decisão", "H": "Reco
 _EU_LANGUAGE = "http://publications.europa.eu/resource/authority/language/{lang}"
 
 
-def build_eurlex_query(terms: list[str], *, limit: int, language: str = "ENG") -> str:
+def build_eurlex_query(
+    terms: list[str], *, limit: int, language: str = "ENG", act_type: str | None = None
+) -> str:
     """SPARQL over Cellar using Virtuoso's full-text index (``bif:contains``).
 
     A plain ``FILTER(CONTAINS(...))`` scans every title and takes 20-30 s; the text index answers
@@ -287,7 +289,8 @@ def build_eurlex_query(terms: list[str], *, limit: int, language: str = "ENG") -
         "  ?work cdm:resource_legal_id_celex ?celex ;\n"
         "        cdm:work_date_document ?date .\n"
         '  FILTER(STRSTARTS(STR(?celex), "3"))\n'
-        f"}} ORDER BY DESC(?date) LIMIT {int(limit)}"
+        + (f'  FILTER(SUBSTR(STR(?celex), 6, 1) = "{act_type}")\n' if act_type else "")
+        + f"}} ORDER BY DESC(?date) LIMIT {int(limit)}"
     )
 
 
@@ -298,9 +301,49 @@ _EURLEX_GENERIC = {
     "european", "europe", "union", "adopted", "approved", "published", "new", "law", "official",
     "européenne", "européen", "adoptée", "adopté", "publiée", "nouvelle", "loi", "officiel",
     "europeia", "europeu", "união", "adotada", "aprovada", "publicada", "nova", "novo", "lei",
+    "act", "acte", "ato",
+}  # fmt: skip
+#: CELEX document-type letter for the act named in the claim (sector 3 = legislation).
+_EURLEX_ACT_TYPES = {
+    "directive": "L", "diretiva": "L",
+    "regulation": "R", "règlement": "R", "regulamento": "R",
+    "decision": "D", "décision": "D", "decisão": "D",
 }  # fmt: skip
 #: Most words AND-ed in one query; more makes titles impossible to match.
 _EURLEX_MAX_WORDS = 4
+
+
+_AI_SPELLED = {
+    "ENG": "artificial intelligence",
+    "FRA": "intelligence artificielle",
+    "POR": "inteligência artificial",
+}
+#: Corrections and implementing acts (titles start like this): never the act a claim names.
+_SECONDARY_ACT = re.compile(
+    r"^(corrigendum|rectificatif|retificação)|implementing|d'exécution|de execução", re.IGNORECASE
+)
+#: Acts adopted by Parliament and Council: the major laws people talk about.
+_MAIN_ACT = re.compile(
+    r"European Parliament and of the Council|Parlement européen et du Conseil"
+    r"|Parlamento Europeu e do Conselho",
+    re.IGNORECASE,
+)
+
+
+def _act_rank(act: dict[str, str], year: str | None) -> tuple[bool, bool, bool]:
+    """Sort key: the act of the cited year first, then major laws, corrections last."""
+    title = act.get("title", "")
+    other_year = bool(year) and act.get("celex", "")[1:5] != year
+    return other_year, bool(_SECONDARY_ACT.search(title)), not _MAIN_ACT.search(title)
+
+
+def eurlex_act_type(words: list[str]) -> str | None:
+    """CELEX type letter of the first act kind named in ``words`` (directive, regulation...)."""
+    for word in words:
+        for part in _SPARQL_SAFE.sub(" ", word).lower().split():
+            if part in _EURLEX_ACT_TYPES:
+                return _EURLEX_ACT_TYPES[part]
+    return None
 
 
 class EurLexConnector(BaseGovConnector):
@@ -311,7 +354,13 @@ class EurLexConnector(BaseGovConnector):
     domains = frozenset({Domain.LEGAL_JUSTICE})
 
     async def search_acts(
-        self, terms: list[str], *, limit: int = 5, language: str = "ENG"
+        self,
+        terms: list[str],
+        *,
+        limit: int = 5,
+        language: str = "ENG",
+        years: list[str] | None = None,
+        act_type: str | None = None,
     ) -> list[dict[str, str]]:
         """Acts whose title (in ``language``) contains all the distinctive words of ``terms``.
 
@@ -319,26 +368,61 @@ class EurLexConnector(BaseGovConnector):
         directive" vs "Directive (EU) 2019/790 ... on copyright"). When nothing matches, the
         first (longest) word is dropped, down to two words, so a search never degrades into a
         single common word that matches unrelated acts.
+
+        Results are newest first, so a broad match ("artificial intelligence") would list recent
+        acts that merely mention it: the year and the kind of act cited in the claim ("the
+        regulation ... adopted in 2024") narrow the search first, and are relaxed if nothing
+        matches.
         """
         words: list[str] = []
         for term in terms:
-            for word in _SPARQL_SAFE.sub(" ", term).lower().split():
+            text = _SPARQL_SAFE.sub(" ", term).lower()
+            # "AI" is too short for the text index; titles spell it out.
+            text = re.sub(
+                r"\b(ai|ia)\b", _AI_SPELLED.get(language, "artificial intelligence"), text
+            )
+            for word in text.split():
                 # Virtuoso's text index rejects very short (noise) words.
                 if len(word) > 2 and word not in _EURLEX_GENERIC and word not in words:
                     words.append(word)
         words = words[:_EURLEX_MAX_WORDS]
+        act_type = act_type or eurlex_act_type(words)
+        year = next(iter(years or []), None)
+        # Fetch more than needed: acts that merely amend or cite the one in the claim are newer
+        # and would fill the page; acts numbered with the cited year ("32024R1689") go first.
+        fetch = max(limit * 4, 20)
+        # Strictest first: words + year (titles carry "2019/790" and the adoption date) and the
+        # act type; then without the year; then without the type.
+        attempts = [([*words, year] if year else None, act_type), (words, act_type)]
+        if act_type:
+            attempts.append((words, None))
+        for candidate, kind in attempts:
+            if not candidate:
+                continue
+            acts = await self._narrowing(candidate, fetch, language, kind, keep=1 if year else 0)
+            if acts:
+                acts.sort(key=lambda act: _act_rank(act, year))
+                return acts[:limit]
+        return []
+
+    async def _narrowing(
+        self, words: list[str], limit: int, language: str, act_type: str | None, keep: int
+    ) -> list[dict[str, str]]:
+        """Drops the first (longest) word until a title matches; the last ``keep`` stay."""
         minimum = min(2, len(words))
-        while words and len(words) >= minimum:
-            acts = await self._query(words, limit, language)
+        while words and len(words) >= max(minimum, keep + 1):
+            acts = await self._query(words, limit, language, act_type)
             if acts:
                 return acts
             words = words[1:]
         return []
 
-    async def _query(self, terms: list[str], limit: int, language: str) -> list[dict[str, str]]:
+    async def _query(
+        self, terms: list[str], limit: int, language: str, act_type: str | None = None
+    ) -> list[dict[str, str]]:
         payload = await self._request(
             self.base_url,
-            {"query": build_eurlex_query(terms, limit=limit, language=language)},
+            {"query": build_eurlex_query(terms, limit=limit, language=language, act_type=act_type)},
             headers={"Accept": "application/sparql-results+json"},
         )
         results = payload.get("results") if isinstance(payload, dict) else None
@@ -351,10 +435,18 @@ class EurLexConnector(BaseGovConnector):
         attempts = [(query.keywords_en, "ENG")]
         if query.language != "en":
             attempts.append((query.keywords, _EURLEX_LANGUAGES.get(query.language, "ENG")))
+        # "règlement" may only be in the French words while the English terms drive the search.
+        act_type = eurlex_act_type([*query.keywords_en, *query.keywords])
         acts: list[dict[str, str]] = []
         for terms, language in attempts:
             if terms:
-                acts = await self.search_acts(terms, limit=query.max_results, language=language)
+                acts = await self.search_acts(
+                    terms,
+                    limit=query.max_results,
+                    language=language,
+                    years=query.years,
+                    act_type=act_type,
+                )
             if acts:
                 break
         evidence = []

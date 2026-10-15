@@ -197,16 +197,23 @@ class FactCheckService:
 
     def select_connectors(self, analysis: ClaimAnalysis) -> list[BaseGovConnector]:
         scopes = {*analysis.country.countries(), Country.GLOBAL}
-        if Country.FR in scopes:
+        terms = " ".join([*analysis.keywords, *analysis.keywords_en, *analysis.topics]).lower()
+        # France is in the EU; any claim about "Europe" (e.g. a Brazilian asking about an EU law)
+        # also reaches EU sources.
+        about_europe = "europ" in terms
+        if Country.FR in scopes or about_europe:
             scopes.add(Country.EU)
         domains = set(analysis.domains) or set(DEFAULT_DOMAINS)
         if analysis.urls:
             domains.add(Domain.WEB_HISTORY)
-        return [
+        selected = [
             c
             for c in self.connectors
             if c.enabled and c.country in scopes and (c.domains & domains)
         ]
+        if about_europe:  # the EU act the claim talks about comes before national results
+            selected.sort(key=lambda c: c.country is not Country.EU)
+        return selected
 
     async def collect_evidence(
         self, analysis: ClaimAnalysis
@@ -221,6 +228,7 @@ class FactCheckService:
             countries=sorted(c.value for c in analysis.country.countries()),
             legal_references=analysis.legal_references,
             urls=analysis.urls,
+            years=analysis.years,
             language=analysis.language,
             max_results=self.max_results_per_connector,
         )
