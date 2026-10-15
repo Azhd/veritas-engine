@@ -265,7 +265,7 @@ class FactCheckService:
             max_results=self.max_results_per_connector,
         )
         results = await asyncio.gather(
-            *(c.search_evidence(query) for c in selected), return_exceptions=True
+            *(c.search_within_deadline(query) for c in selected), return_exceptions=True
         )
 
         failures: list[ConnectorFailure] = []

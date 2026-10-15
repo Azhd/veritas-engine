@@ -230,36 +230,56 @@ class WhoGhoConnector(BaseGovConnector):
         terms = [t for t in [*query.topics_en, *query.keywords_en] if t] or query.keywords
         spatials = [WHO_COUNTRY_CODES[c] for c in query.countries if c in WHO_COUNTRY_CODES]
         spatials = spatials or ["GLOBAL"]
-        evidence: list[Evidence] = []
-        seen: set[str] = set()
-        for term in terms[:3]:
-            for indicator in await self.find_indicators(term):
+        # Candidates from each term, ranked by how many of the claim's words their name contains:
+        # "measles vaccine coverage" must pick measles immunization coverage, not the first
+        # "coverage" indicator (antenatal care). With several words, one match is not enough.
+        words = list(dict.fromkeys(w for t in terms for w in t.lower().split() if len(w) >= 3))
+        candidates: dict[str, dict[str, str]] = {}
+        for term in terms[:4]:
+            for indicator in await self.find_indicators(term, limit=5):
                 code = indicator.get("IndicatorCode", "")
-                if not code or code in seen or len(seen) >= self.max_indicators:
+                if code:
+                    candidates.setdefault(code, indicator)
+
+        def score(indicator: dict[str, str]) -> int:
+            name = str(indicator.get("IndicatorName", "")).lower()
+            return sum(word in name for word in words)
+
+        needed = 2 if len(words) >= 2 else 1
+        ranked = sorted(
+            (i for i in candidates.values() if score(i) >= needed), key=score, reverse=True
+        )
+        evidence: list[Evidence] = []
+        used = 0
+        for indicator in ranked:
+            if used >= self.max_indicators:
+                break
+            code = indicator.get("IndicatorCode", "")
+            found = False
+            for spatial in spatials:
+                rows = _preferred_rows(await self.indicator_values(code, spatial))
+                if not rows:
                     continue
-                seen.add(code)
-                for spatial in spatials:
-                    rows = _preferred_rows(await self.indicator_values(code, spatial))
-                    if not rows:
-                        continue
-                    series = "; ".join(
-                        f"{r.get('TimeDim')}: {r.get('Value') or r.get('NumericValue')}"
-                        for r in rows[:6]
+                found = True
+                series = "; ".join(
+                    f"{r.get('TimeDim')}: {r.get('Value') or r.get('NumericValue')}"
+                    for r in rows[:6]
+                )
+                evidence.append(
+                    self._evidence(
+                        title=f"{indicator.get('IndicatorName')} - {spatial}",
+                        url=f"{self.base_url}/{code}?$filter=SpatialDim%20eq%20'{spatial}'",
+                        excerpt=series,
+                        published_at=_year_date(rows[0].get("TimeDim")),
+                        identifiers={"who_indicator": code, "spatial": spatial},
+                        data={
+                            "series": {
+                                str(r.get("TimeDim")): r.get("NumericValue") for r in rows[:6]
+                            }
+                        },
                     )
-                    evidence.append(
-                        self._evidence(
-                            title=f"{indicator.get('IndicatorName')} - {spatial}",
-                            url=f"{self.base_url}/{code}?$filter=SpatialDim%20eq%20'{spatial}'",
-                            excerpt=series,
-                            published_at=_year_date(rows[0].get("TimeDim")),
-                            identifiers={"who_indicator": code, "spatial": spatial},
-                            data={
-                                "series": {
-                                    str(r.get("TimeDim")): r.get("NumericValue") for r in rows[:6]
-                                }
-                            },
-                        )
-                    )
+                )
+            used += found  # an indicator without data for the country does not count
         return evidence[: query.max_results]
 
 

@@ -61,7 +61,7 @@ async def test_edited_article_with_title_change():
     evidence = await conn.search_evidence(EvidenceQuery(urls=[URL]))
     cdx_params = seen[0].params
     assert cdx_params["url"] == URL
-    assert cdx_params["collapse"] == "digest"
+    assert cdx_params["collapse"] == "timestamp:6"
     assert cdx_params["output"] == "json"
 
     item = evidence[0]
@@ -148,7 +148,7 @@ async def test_limits_and_deduplicates_urls():
     evidence = await conn.search_evidence(EvidenceQuery(urls=urls))
     assert len(evidence) == 3
     cdx = [u for u in seen if u.path == "/cdx/search/cdx"]
-    assert len([u for u in cdx if u.params.get("collapse") == "digest"]) == 3
+    assert len([u for u in cdx if u.params.get("collapse") == "timestamp:6"]) == 3
     assert len([u for u in cdx if u.params.get("fastLatest") == "true"]) == 3
 
 

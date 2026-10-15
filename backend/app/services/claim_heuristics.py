@@ -72,6 +72,10 @@ _STOPWORDS = _PT_WORDS | _FR_WORDS | _EN_STOPWORDS | {
     "provoque",
     "confirmando", "confirma", "confirmou", "divulgou", "divulga", "relatorio",
     "relatorios", "ultimos", "ultimas", "observatorio", "consecutivos",
+    # legislative verbs and the chambers themselves: every bill title would match them, so they
+    # drown the subject ("reforma tributária") in parliament searches
+    "aprovou", "aprovado", "aprovada", "aprovaram", "aprova", "votou", "votaram", "camara",
+    "deputados", "senado", "federal", "adopte", "adoptee", "approved", "passed",
 }  # fmt: skip
 
 

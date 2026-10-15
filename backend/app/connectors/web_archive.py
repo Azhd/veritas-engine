@@ -12,12 +12,15 @@ APIs: Availability API (``archive.org/wayback/available``) and CDX server
 
 from __future__ import annotations
 
+import asyncio
 import html
 import re
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
 from urllib.parse import urlparse
+
+import httpx
 
 from app.connectors.base import BaseGovConnector
 from app.core.errors import ConnectorError
@@ -30,6 +33,8 @@ _REMOVED_STATUS = frozenset({"404", "410", "451"})
 _REDIRECT_STATUS = frozenset({"301", "302", "303", "307", "308"})
 #: Maximum CDX rows inspected per URL (news articles rarely have more distinct versions).
 CDX_LIMIT = 50
+#: Page titles of old snapshots are optional; never wait longer than this for them.
+TITLE_TIMEOUT_SECONDS = 5.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +130,12 @@ class WaybackConnector(BaseGovConnector):
 
     max_urls = 3
 
+    def __init__(self, client: httpx.AsyncClient | None = None, **kw: Any) -> None:
+        super().__init__(client, **kw)
+        # The Internet Archive answers in 1 s or in 20 s: one retry is enough, more only makes
+        # the whole check wait (the deadline stops it anyway).
+        self.max_retries = min(self.max_retries, 1)
+
     async def availability(self, url: str, timestamp: str | None = None) -> dict[str, Any] | None:
         payload = await self._get_json(
             "https://archive.org/wayback/available", {"url": url, "timestamp": timestamp}
@@ -134,12 +145,13 @@ class WaybackConnector(BaseGovConnector):
         return closest if isinstance(closest, dict) and closest.get("available") else None
 
     async def captures(self, url: str) -> list[Capture]:
-        """Oldest-first distinct states of the page (bounded by ``CDX_LIMIT``)."""
-        return await self._cdx(
-            url,
-            # Collapse consecutive identical captures: each row is a new state of the page.
-            {"collapse": "digest", "limit": CDX_LIMIT},
-        )
+        """Oldest-first captures of the page, at most one per month (bounded by ``CDX_LIMIT``).
+
+        One capture per month answers in ~4 s; collapsing identical captures ("digest") took
+        10-25 s on busy pages and blew the connector deadline. Content changes are still seen
+        through the digests of the monthly captures.
+        """
+        return await self._cdx(url, {"collapse": "timestamp:6", "limit": CDX_LIMIT})
 
     async def latest_capture(self, url: str) -> Capture | None:
         """Most recent capture (fast path of the CDX server, ~2 s even for busy URLs)."""
@@ -169,21 +181,20 @@ class WaybackConnector(BaseGovConnector):
         return extract_title(raw[:200_000])
 
     async def history(self, url: str) -> ArchiveHistory:
-        captures = await self.captures(url)
+        # The two CDX calls are independent: run them together (the archive is often slow).
+        captures, latest = await asyncio.gather(self.captures(url), self._latest_or_none(url))
         if not captures:
             return ArchiveHistory(url=url, captures=await self._availability_fallback(url))
         truncated = len(captures) >= CDX_LIMIT
-        try:
-            latest = await self.latest_capture(url)
-        except ConnectorError:
-            latest = None  # history is still useful without the newest capture
         if latest is not None and latest.timestamp > captures[-1].timestamp:
             captures.append(latest)
         ok = [c for c in captures if c.status == "200"]
         first_title = last_title = None
         if len(ok) >= 2:
-            first_title = await self.snapshot_title(ok[0])
-            last_title = await self.snapshot_title(ok[-1])
+            # Titles are a bonus: fetched together, and given up after a few seconds.
+            first_title, last_title = await asyncio.gather(
+                self._title_or_none(ok[0]), self._title_or_none(ok[-1])
+            )
         return ArchiveHistory(
             url=url,
             captures=captures,
@@ -191,6 +202,18 @@ class WaybackConnector(BaseGovConnector):
             last_title=last_title,
             truncated=truncated,
         )
+
+    async def _latest_or_none(self, url: str) -> Capture | None:
+        try:
+            return await self.latest_capture(url)
+        except ConnectorError:
+            return None  # history is still useful without the newest capture
+
+    async def _title_or_none(self, capture: Capture) -> str | None:
+        try:
+            return await asyncio.wait_for(self.snapshot_title(capture), TITLE_TIMEOUT_SECONDS)
+        except TimeoutError:
+            return None
 
     async def _availability_fallback(self, url: str) -> list[Capture]:
         # CDX can miss very recent captures; the availability API is the (slow) fallback.

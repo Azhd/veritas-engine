@@ -132,7 +132,9 @@ Senado/STJ/EUR-Lex; clima → Copernicus/NOAA; URL citada → Wayback). Fontes d
 aparecem primeiro; fontes amplas (PubMed) ficam limitadas a 3 resultados quando as dedicadas já
 responderam.
 
-**Resiliência:** timeout de 8 s por consulta, retentativas com backoff exponencial e cache TTL. Exceções
+**Resiliência:** timeout de 8 s por consulta, retentativas com backoff exponencial, cache TTL e um
+**prazo total por fonte** (`deadline_seconds`: 16 s, ou o tempo de download + 8 s nos datasets em
+lote), para que uma fonte lenta nunca segure a checagem inteira. Exceções
 homologadas: downloads em lote (STJ, Copernicus) usam `VERITAS_DATASET_TIMEOUT_SECONDS` (30 s) e
 cache longo; GDELT e Wayback são best-effort (GDELT com intervalo mínimo de 5,5 s entre chamadas).
 
@@ -184,7 +186,18 @@ cd backend
 .venv/Scripts/ruff check . && .venv/Scripts/ruff format --check .
 ```
 
-338 testes; nenhum faz chamadas de rede reais (SDKs e APIs públicas são mockados). Os testes de
+**As fontes estão respondendo?** Teste ao vivo de todos os conectores (chamadas reais, nenhuma
+chave de IA envolvida), cada um com uma afirmação que deveria encontrar:
+
+```bash
+.venv/Scripts/python -m app.connectors.healthcheck              # todos
+.venv/Scripts/python -m app.connectors.healthcheck br.ibge web.wayback   # só alguns
+```
+
+Resultado por fonte: `OK` (respondeu com evidência), `EMPTY` (respondeu sem nada), `FAIL` (erro ou
+tempo esgotado) ou `DISABLED` (falta a credencial gratuita). O código de saída é 1 se houver `FAIL`.
+
+362 testes; nenhum faz chamadas de rede reais (SDKs e APIs públicas são mockados). Os testes de
 mídia (`tests/test_media_forensics.py`) usam um FFmpeg falso e imagens geradas na hora; os de C2PA
 assinam JPEGs com uma cadeia de certificados descartável e são pulados se o `c2pa-python` não estiver
 instalado.

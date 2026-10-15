@@ -141,6 +141,25 @@ class BaseGovConnector(ABC):
         """
         return cls(client, **common)
 
+    @property
+    def deadline_seconds(self) -> float:
+        """Whole-search budget (all requests and retries) before the source is given up.
+
+        Without it one slow source (Wayback retrying 4 x 8 s) held the whole check for ~40 s,
+        since the verdict waits for every source. Bulk datasets keep their approved longer
+        download time.
+        """
+        dataset = getattr(self, "dataset_timeout_seconds", 0.0)
+        return max(self.timeout_seconds * 2, dataset + self.timeout_seconds)
+
+    async def search_within_deadline(self, query: EvidenceQuery) -> list[Evidence]:
+        try:
+            return await asyncio.wait_for(self.search_evidence(query), self.deadline_seconds)
+        except TimeoutError as exc:
+            raise ConnectorUnavailableError(
+                f"{self.source_id}: sem resposta em {self.deadline_seconds:.0f} s"
+            ) from exc
+
     async def warm_up(self) -> None:  # noqa: B027 - optional hook
         """Preload slow resources (bulk datasets) in the background at startup."""
 

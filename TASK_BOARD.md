@@ -435,3 +435,17 @@
 - **Verificado ao vivo**: "Macron é presidente da ucrania" → Wikidata: chefe de Estado da Ucrânia = Volodymyr Zelensky (desde 20/05/2019) e cargos de Macron (Presidente da França desde 14/05/2017); "Lula is the president of Brazil" → Lula desde 01/01/2023. Afirmações sem cargo não fazem nenhuma chamada ao Wikidata.
 - **Testes**: 338 passed (novo `tests/test_public_knowledge.py`). Commit local, sem push.
 - **Para o Antigravity**: o usuário pediu também outras bases públicas confiáveis "cuja veracidade é confirmada"; lista de candidatas apresentada no chat para aprovação antes de implementar.
+
+---
+
+#### Adendo 2026-10-15 (Fase 4): verificação ao vivo de todos os conectores (pedido do usuário)
+- **Ferramenta**: `python -m app.connectors.healthcheck` testa cada fonte com uma afirmação que ela deveria responder (OK / EMPTY / FAIL / DISABLED). Teste garante que toda fonte registrada tem uma afirmação de teste.
+- **1ª rodada**: OK 10 · EMPTY 3 · FAIL 2 · DISABLED 4. **Rodada final**: **OK 14 · EMPTY 0 · FAIL 1 · DISABLED 4**.
+- **Corrigido**:
+  - Câmara e Senado vazios para "reforma tributária": a busca levava "tributária deputados aprovou". Verbos legislativos e nomes das casas (aprovou, câmara, deputados, senado, federal...) saíram dos termos de busca. Agora: PLP 236/2026 (Câmara), PL 2584/2026 (Senado).
+  - OMS vazia para cobertura vacinal de sarampo: pegava os 2 primeiros indicadores do 1º termo ("coverage" → pré-natal). Agora os indicadores são ordenados pelo número de palavras da afirmação no nome (mínimo 2 quando há várias) e só contam se tiverem dados do país. Efeito extra: "vacinas causam autismo" não traz mais coberturas vacinais sem relação.
+  - **Prazo total por fonte** (`deadline_seconds`, 16 s; datasets em lote: download + 8 s): antes, a Wayback com 4 tentativas de 8 s segurava a checagem inteira ~37 s.
+  - Wayback: no máximo 1 nova tentativa; as duas consultas CDX e os dois títulos rodam em paralelo (títulos com 5 s no máximo); amostra de uma captura por mês (`collapse=timestamp:6`, ~4 s) no lugar de `collapse=digest` (10–25 s em páginas muito arquivadas). gov.br: de FAIL (16 s) para OK (~10 s).
+- **Ainda falhando (externo)**: **GDELT** responde em 13–42 s ou HTTP 429 (sobrecarga do serviço), acima do limite de 8 s do CLAUDE.md; segue best-effort (falha graciosa, pausa de 60 s após erro), como homologado na Fase 2. NOAA teve uma queda passageira numa rodada e voltou (0,3 s).
+- **Desativados por falta de credencial gratuita**: Portal da Transparência, Légifrance, Judilibre (PISTE) e ReliefWeb.
+- **Testes**: 362 passed (novo `tests/test_connector_health.py`). Commit local, sem push.
