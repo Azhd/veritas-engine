@@ -1,0 +1,5 @@
+# Offline transcription on this computer (optional, custo zero de tokens).
+# Without it, Veritas transcribes with the free Groq Whisper API (same Groq key) or Gemini.
+# The first transcription downloads the Whisper model (~150 MB for "base").
+-r requirements-media.txt
+faster-whisper>=1.0

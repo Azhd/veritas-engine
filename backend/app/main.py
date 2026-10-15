@@ -20,14 +20,17 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 
-from app.api.v1 import byok, connectors, fact_check
+from app.api.v1 import byok, connectors, fact_check, media
 from app.connectors.registry import build_connectors, warm_up
 from app.core.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
 from app.engines.factory import ProviderFactory
+from app.forensics.tools import detect_capabilities
 from app.services.fact_checker import FactCheckService
+from app.services.media_checker import MediaCheckService
+from app.web_pages import SUPPORTED_LANGUAGES, render_app_page
 
-#: Citizen web app (static HTML/CSS/JS, no build step) served at ``/``.
+#: Citizen web app (static HTML/CSS/JS, no build step): chooser at ``/``, app at ``/pt/`` etc.
 WEB_DIR = Path(__file__).parent / "web"
 #: Browsers otherwise cache the assets heuristically and keep stale versions after an update;
 #: ``no-cache`` still lets them reuse the file after a cheap ETag check (HTTP 304).
@@ -72,6 +75,10 @@ OPENAPI_TAGS = [
         "name": "byok",
         "description": "Provedores de IA aceitos: gratuitos (Gemini, Groq, Ollama) primeiro.",
     },
+    {
+        "name": "media",
+        "description": "Perícia de vídeo, áudio e imagens (ferramentas deste servidor).",
+    },
     {"name": "health", "description": "Estado do serviço."},
 ]
 
@@ -110,12 +117,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.fact_check_service = FactCheckService(
             connectors, max_results_per_connector=settings.connector_max_results
         )
+        app.state.media_check_service = MediaCheckService(settings, app.state.fact_check_service)
         warm_task = asyncio.create_task(warm_up(connectors)) if settings.connector_warm_up else None
+        # Logs which media tools exist (FFmpeg, ExifTool, C2PA...) without delaying startup.
+        tools_task = asyncio.create_task(asyncio.to_thread(detect_capabilities))
         try:
             yield
         finally:
             if warm_task is not None and not warm_task.done():
                 warm_task.cancel()
+            if not tools_task.done():
+                tools_task.cancel()
             await http_client.aclose()
 
     app = FastAPI(
@@ -148,10 +160,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return HTMLResponse(html)
 
     @app.get("/", include_in_schema=False)
-    async def web_app() -> FileResponse:
+    async def language_chooser() -> FileResponse:
         return FileResponse(
-            WEB_DIR / "index.html", media_type="text/html", headers=REVALIDATE_HEADERS
+            WEB_DIR / "home.html", media_type="text/html", headers=REVALIDATE_HEADERS
         )
+
+    def app_page(lang: str) -> Any:
+        async def page() -> HTMLResponse:
+            return HTMLResponse(render_app_page(lang), headers=REVALIDATE_HEADERS)
+
+        return page
+
+    for lang in SUPPORTED_LANGUAGES:
+        # "/en" is redirected to "/en/" by the router (redirect_slashes).
+        app.add_api_route(f"/{lang}/", app_page(lang), include_in_schema=False)
 
     app.mount("/static", RevalidatingStaticFiles(directory=WEB_DIR), name="static")
 
@@ -162,6 +184,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     api_v1 = APIRouter(prefix="/api/v1")
     api_v1.include_router(fact_check.router)
     api_v1.include_router(connectors.router)
+    api_v1.include_router(media.router)
     api_v1.include_router(byok.router)
     app.include_router(api_v1)
     return app

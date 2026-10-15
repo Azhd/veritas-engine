@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.evidence import Country, Domain
+from app.schemas.forensics import MediaForensicsReport
 
 
 class Verdict(StrEnum):
@@ -24,6 +25,14 @@ class Verdict(StrEnum):
 
 #: Verdicts that assert something about reality and therefore require cited official evidence.
 ASSERTIVE_VERDICTS = frozenset({Verdict.VERDADEIRO, Verdict.FALSO, Verdict.ENGANOSO})
+
+
+class ReplyLanguage(StrEnum):
+    """Language of the citizen app page; the verdict explanation is written in it."""
+
+    PT = "pt"
+    EN = "en"
+    FR = "fr"
 
 
 class CountryContext(StrEnum):
@@ -50,6 +59,10 @@ class TextFactCheckRequest(BaseModel):
         default=None,
         max_length=2048,
         description="Link de onde a informação veio; também é auditado no Internet Archive.",
+    )
+    language: ReplyLanguage | None = Field(
+        default=None,
+        description="Idioma da explicação (pt, en, fr). Sem ele, usa o idioma da afirmação.",
     )
 
     @field_validator("source_url")
@@ -233,3 +246,25 @@ class FactCheckReport(BaseModel):
 
     def model_post_init(self, __context: Any) -> None:
         self.confidence_score = round(self.confidence_score, 3)
+
+
+# ---------------------------------------------------------------- media (Phase 3)
+class TimedCheck(BaseModel):
+    """A claim found in the media, where it was said, and its fact-check."""
+
+    start_time: float | None = Field(
+        default=None, description="Seconds into the media; None for the text sent by the user."
+    )
+    label: str = Field(description="'01:23' or 'Texto informado'.")
+    quote: str = ""
+    report: FactCheckReport
+
+
+class MediaFactCheckReport(BaseModel):
+    forensics: MediaForensicsReport
+    checks: list[TimedCheck] = Field(default_factory=list)
+    ai_used: bool
+    provider: str
+    model: str
+    notes: list[str] = Field(default_factory=list)
+    checked_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

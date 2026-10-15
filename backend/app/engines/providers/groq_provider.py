@@ -23,6 +23,8 @@ class GroqProvider(OpenAICompatibleProvider):
         "meta-llama/llama-4-scout-17b-16e-instruct",
         "llama-3.1-8b-instant",
     )
+    #: Groq's free tier includes Whisper: same key, no cost, 25 MB per file.
+    audio_models = ("whisper-large-v3-turbo", "whisper-large-v3")
 
     def _build_client(self) -> Any:
         return groq.AsyncGroq(

@@ -348,13 +348,26 @@ def test_heuristic_keywords_drop_stopwords():
 
 
 # =============================================================== developer experience (Swagger)
-def test_root_serves_citizen_web_app(client):
+def test_root_serves_language_chooser_and_app_pages(client):
     response = client.get("/")
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
-    html = response.text
+    assert all(f'href="/{lang}/"' in response.text for lang in ("pt", "en", "fr"))
+    html = client.get("/pt/").text
     assert 'id="checkForm"' in html and 'id="resultPanel"' in html
     assert "/static/app.js" in html and "/static/styles.css" in html
+
+
+def test_reply_language_is_validated(client):
+    response = client.post(ENDPOINT, json={"claim": "A inflação passou de 10%.", "language": "es"})
+    assert response.status_code == 422
+
+
+def test_citizen_mode_answers_in_the_page_language(client):
+    body = {"claim": "Unemployment in France has doubled since 2020.", "language": "en"}
+    report = client.post(ENDPOINT, json=body).json()
+    assert report["verdict"] == "SEM_CHAVE_IA_DADOS_BRUTOS"
+    assert report["explanation"].startswith("Citizen mode (no AI)")
 
 
 @pytest.mark.parametrize(

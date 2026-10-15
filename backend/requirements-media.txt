@@ -1,0 +1,5 @@
+# Full media forensics (optional). Install with:  ./run.ps1 -Full   or   ./run.sh --full
+# The Docker image always includes these plus system FFmpeg and ExifTool.
+-r requirements.txt
+imageio-ffmpeg>=0.5  # FFmpeg binary bundled in the wheel: audio/keyframe extraction without installing FFmpeg
+c2pa-python>=0.10  # C2PA provenance (AI generator / camera signature). Windows wheel is large (~300 MB)

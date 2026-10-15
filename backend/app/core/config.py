@@ -68,6 +68,13 @@ class Settings(BaseSettings):
     #: Preload bulk datasets (STJ precedents, INSEE catalog) in the background at startup.
     connector_warm_up: bool = True
 
+    # ---------------- Media forensics (Phase 3) ----------------
+    media_tmp_dir: str | None = None  # default: system temp dir / veritas-media
+    media_max_bytes: int = Field(default=50 * 1024 * 1024, ge=1)  # 50 MB
+    media_max_duration_seconds: int = Field(default=900, ge=10)  # 15 min of audio/video
+    media_keyframes: int = Field(default=6, ge=1, le=30)
+    whisper_local_model: str = "base"  # faster-whisper model when installed
+
     # ---------------- Optional credentials for primary sources ----------------
     # Connectors whose credential is missing stay registered but are skipped (reported as
     # disabled), so the pipeline never fails because of them.

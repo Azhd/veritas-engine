@@ -9,8 +9,9 @@ from google.genai import errors as genai_errors
 from google.genai import types
 
 from app.core.config import ProviderName
-from app.core.errors import ProviderUnavailableError
-from app.engines.base import BaseLLMProvider, ProviderCredentials
+from app.core.errors import ProviderOutputError, ProviderUnavailableError
+from app.engines.base import BaseLLMProvider, ProviderCredentials, TranscriptionResult
+from app.engines.json_utils import extract_json
 from app.engines.providers._errors import map_status_code
 
 
@@ -24,6 +25,7 @@ class GeminiProvider(BaseLLMProvider):
         "gemini-2.5-flash-lite",
     )
     non_chat_markers = (*BaseLLMProvider.non_chat_markers, "pro", "exp", "preview", "gemma")
+    supports_audio = True
 
     def __init__(self, credentials: ProviderCredentials, client: Any | None = None) -> None:
         super().__init__(credentials)
@@ -32,7 +34,7 @@ class GeminiProvider(BaseLLMProvider):
             http_options=types.HttpOptions(timeout=int(credentials.timeout_seconds * 1000)),
         )
 
-    async def _generate(self, prompt: str, config: types.GenerateContentConfig) -> str:
+    async def _generate(self, prompt: Any, config: types.GenerateContentConfig) -> str:
         try:
             response = await self._client.aio.models.generate_content(
                 model=self.model, contents=prompt, config=config
@@ -78,6 +80,55 @@ class GeminiProvider(BaseLLMProvider):
             response_json_schema=json_schema,
         )
         return await self._generate(prompt, config)
+
+    async def transcribe_audio(
+        self, audio: bytes, filename: str, mime_type: str, language: str | None = None
+    ) -> TranscriptionResult:
+        """Gemini listens to the audio directly and returns timestamped segments as JSON."""
+        schema = {
+            "type": "object",
+            "properties": {
+                "language": {"type": "string"},
+                "segments": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "start": {"type": "number"},
+                            "end": {"type": "number"},
+                            "text": {"type": "string"},
+                        },
+                        "required": ["start", "end", "text"],
+                    },
+                },
+            },
+            "required": ["segments"],
+        }
+        config = types.GenerateContentConfig(
+            temperature=0.0,
+            max_output_tokens=self.credentials.max_output_tokens * 2,
+            response_mime_type="application/json",
+            response_json_schema=schema,
+        )
+        prompt = (
+            "Transcreva fielmente este áudio, no idioma original, em trechos de 5 a 20 segundos. "
+            "Para cada trecho informe start e end em segundos desde o início. Não resuma e não "
+            "invente falas; trechos inaudíveis viram [inaudível]."
+        )
+        contents = [types.Part.from_bytes(data=audio, mime_type=mime_type), prompt]
+        raw = await self._generate(contents, config)
+        try:
+            payload = extract_json(raw)
+            segments = [
+                (float(s["start"]), float(s["end"]), str(s["text"]).strip())
+                for s in payload.get("segments", [])
+                if str(s.get("text", "")).strip()
+            ]
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
+            raise ProviderOutputError("gemini: transcrição em formato inválido") from exc
+        return TranscriptionResult(
+            segments=segments, language=payload.get("language"), model=self.model
+        )
 
     async def list_models(self) -> list[str]:
         names: list[str] = []

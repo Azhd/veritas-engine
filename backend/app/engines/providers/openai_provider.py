@@ -8,7 +8,12 @@ from typing import Any, ClassVar
 import openai
 
 from app.core.config import ProviderName
-from app.engines.base import BaseLLMProvider, ProviderCredentials, json_system_instruction
+from app.engines.base import (
+    BaseLLMProvider,
+    ProviderCredentials,
+    TranscriptionResult,
+    json_system_instruction,
+)
 from app.engines.providers._errors import map_openai_style_error
 
 
@@ -16,6 +21,13 @@ class OpenAICompatibleProvider(BaseLLMProvider):
     """Shared Chat Completions logic for OpenAI and Groq (same request/response shape)."""
 
     sdk: ClassVar[ModuleType]
+    #: Whisper models for ``/audio/transcriptions`` (first available wins).
+    audio_models: ClassVar[tuple[str, ...]] = ()
+
+    @property
+    def supports_audio(self) -> bool:  # type: ignore[override]
+        # Custom OpenAI-compatible servers (vLLM...) rarely expose Whisper.
+        return bool(self.audio_models) and not self.credentials.endpoint_url
 
     def __init__(self, credentials: ProviderCredentials, client: Any | None = None) -> None:
         super().__init__(credentials)
@@ -53,6 +65,40 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         except self.sdk.APIError as exc:
             raise map_openai_style_error(exc, self.sdk, self.name.value) from None
         return response.choices[0].message.content or ""
+
+    async def transcribe_audio(
+        self, audio: bytes, filename: str, mime_type: str, language: str | None = None
+    ) -> TranscriptionResult:
+        last_error: Exception | None = None
+        for model in self.audio_models:
+            kwargs: dict[str, Any] = {
+                "file": (filename, audio, mime_type),
+                "model": model,
+                "response_format": "verbose_json",
+                "timestamp_granularities": ["segment"],
+                "temperature": 0.0,
+            }
+            if language:
+                kwargs["language"] = language
+            try:
+                response = await self._client.audio.transcriptions.create(**kwargs)
+            except self.sdk.NotFoundError as exc:  # model not enabled for this key: try the next
+                last_error = exc
+                continue
+            except self.sdk.APIError as exc:
+                raise map_openai_style_error(exc, self.sdk, self.name.value) from None
+            segments = []
+            for seg in getattr(response, "segments", None) or []:
+                get = seg.get if isinstance(seg, dict) else lambda k, s=seg: getattr(s, k, None)
+                text = str(get("text") or "").strip()
+                if text:
+                    segments.append((float(get("start") or 0), float(get("end") or 0), text))
+            if not segments and getattr(response, "text", ""):
+                segments = [(0.0, 0.0, str(response.text).strip())]
+            return TranscriptionResult(
+                segments=segments, language=getattr(response, "language", None), model=model
+            )
+        raise map_openai_style_error(last_error, self.sdk, self.name.value) from None
 
     async def list_models(self) -> list[str]:
         result = self._client.models.list()
@@ -96,6 +142,7 @@ class OpenAIProvider(OpenAICompatibleProvider):
     sdk = openai
     supports_custom_endpoint = True
     preferred_models = ("gpt-4o", "gpt-4.1", "gpt-4o-mini", "gpt-4.1-mini")
+    audio_models = ("whisper-1",)
 
     def _build_client(self) -> Any:
         return openai.AsyncOpenAI(
