@@ -27,6 +27,7 @@ class Domain(StrEnum):
     GEOPOLITICS = "geopolitics"
     LEGAL_JUSTICE = "legal_justice"
     WEB_HISTORY = "web_history"
+    CLIMATE_ENVIRONMENT = "climate_environment"
 
 
 #: Domains assumed when the claim analysis does not name any (Phase 1 behavior).

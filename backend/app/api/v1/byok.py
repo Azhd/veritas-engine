@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from app.api.deps import get_app_settings, get_provider_factory
+from app.api.deps import (
+    ProviderSelection,
+    get_app_settings,
+    get_optional_llm_provider,
+    get_provider_factory,
+)
 from app.core.config import Settings
+from app.core.errors import VeritasError
 from app.engines.factory import ProviderFactory
 
 router = APIRouter(prefix="/byok", tags=["byok"])
@@ -127,4 +134,47 @@ async def list_providers(
             "(verdict SEM_CHAVE_IA_DADOS_BRUTOS)."
         ),
         providers=providers,
+    )
+
+
+class ConnectionTest(BaseModel):
+    ok: bool
+    provider: str | None = None
+    model: str | None = None
+    message: str
+
+
+@router.post(
+    "/test",
+    response_model=ConnectionTest,
+    summary="Testa a chave de IA informada (chamada mínima ao provedor)",
+    description="Use antes de verificar: confirma que a chave e o modelo funcionam.",
+)
+async def test_connection(
+    selection: Annotated[ProviderSelection, Depends(get_optional_llm_provider)],
+) -> ConnectionTest:
+    provider = selection.provider
+    if provider is None:
+        reason = selection.notes[0] if selection.notes else "Nenhuma IA configurada."
+        return ConnectionTest(ok=False, message=reason)
+    try:
+        await asyncio.wait_for(
+            provider.generate_text("Responda apenas: OK", temperature=0.0), timeout=25
+        )
+    except VeritasError as exc:
+        return ConnectionTest(
+            ok=False, provider=provider.name.value, model=provider.model, message=exc.message
+        )
+    except TimeoutError:
+        return ConnectionTest(
+            ok=False,
+            provider=provider.name.value,
+            model=provider.model,
+            message="O provedor demorou demais para responder.",
+        )
+    return ConnectionTest(
+        ok=True,
+        provider=provider.name.value,
+        model=provider.model,
+        message="Conectado com sucesso.",
     )

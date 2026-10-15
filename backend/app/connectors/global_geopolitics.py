@@ -10,6 +10,8 @@
 from __future__ import annotations
 
 import re
+import time
+from collections.abc import Callable
 from datetime import date
 from typing import Any
 
@@ -118,28 +120,51 @@ class GdeltConnector(BaseGovConnector):
     #: GDELT allows ~1 request / 5 s; keep the default lookback modest to stay fast.
     timespan = "1week"
 
-    def __init__(self, client: httpx.AsyncClient | None = None, **kw: Any) -> None:
+    #: Minimum spacing between real calls (GDELT policy) and back-off after an HTTP 429.
+    min_interval_seconds = 5.5
+    rate_limited_pause_seconds = 60.0
+
+    def __init__(
+        self,
+        client: httpx.AsyncClient | None = None,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+        **kw: Any,
+    ) -> None:
         super().__init__(client, **kw)
         # Retrying within seconds would break GDELT's 1 request / 5 s policy (HTTP 429). It is a
         # best-effort media source: a slow answer is reported as a connector failure instead.
         self.max_retries = 0
+        self._clock = clock
+        self._next_call_at = 0.0
 
     async def search_articles(self, text: str, *, limit: int = 5) -> list[dict[str, Any]]:
         terms = _gdelt_query(text)
         if not terms:
             return []
-        raw = await self._request(
-            "/doc",
-            {
-                "query": terms,
-                "mode": "artlist",
-                "format": "json",
-                "maxrecords": limit,
-                "sort": "datedesc",
-                "timespan": self.timespan,
-            },
-            kind="text",
-        )
+        params = {
+            "query": terms,
+            "mode": "artlist",
+            "format": "json",
+            "maxrecords": limit,
+            "sort": "datedesc",
+            "timespan": self.timespan,
+        }
+        cached = self.cache.get(self._cache_key("GET", self._url("/doc"), params))
+        if cached is None:
+            # Respect GDELT's rate limit locally instead of being blocked (HTTP 429).
+            now = self._clock()
+            if now < self._next_call_at:
+                wait = int(self._next_call_at - now) + 1
+                raise ConnectorUnavailableError(
+                    f"{self.source_id}: limite de consultas do GDELT; tente em ~{wait}s"
+                )
+            self._next_call_at = now + self.min_interval_seconds
+        try:
+            raw = await self._request("/doc", params, kind="text")
+        except ConnectorUnavailableError:
+            self._next_call_at = self._clock() + self.rate_limited_pause_seconds
+            raise
         # On rate limiting or invalid queries GDELT answers HTTP 200 with a plain-text message.
         stripped = (raw or "").strip()
         if not stripped:

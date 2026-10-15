@@ -39,20 +39,19 @@
 
 | Fase | Descrição | Status Atual | Responsável |
 | :--- | :--- | :--- | :--- |
-| **Fase 1** | **Fundação & Core:** Estrutura FastAPI, Dockerfile com FFmpeg/ExifTool, Docker Compose e Router BYOK multi-provedor (Gemini, Claude, OpenAI, Groq, Ollama) | `PUBLICADA NO GITHUB` | Claude Code |
-| **Fase 2** | **Conectores de Fontes Primárias:** Módulos assíncronos em `connectors/` (`br_gov.py`, `fr_gov.py`, `science_health.py`, `legal_justice.py`, `global_geopolitics.py`, `web_archive.py`) | `PRONTO PARA REVISÃO DO ANTIGRAVITY` | Claude Code |
-| **Fase 3** | **Pipeline Multimodal & Forense:** Motor de extração de mídia (`yt-dlp` + FFmpeg), transcrição temporal (Whisper) e validação de imagem/C2PA em `forensics/media_inspector.py` | `BACKLOG` | Claude Code |
+| **Fase 1** | **Fundação & Core:** Estrutura FastAPI, Router BYOK multi-provedor (Gemini, Claude, OpenAI, Groq, Ollama) | `PUBLICADA NO GITHUB` | Claude Code |
+| **Fase 2** | **Conectores de Fontes Primárias & App do Cidadão:** Módulos multidisciplinares assíncronos (`br_gov`, `fr_gov`, `science_health`, `legal_justice`, `global_geopolitics`, `climate_environment`, `web_archive`) + Modo Custo Zero + App Web (`app/web/`) | `AGUARDANDO VALIDAÇÃO DO USUÁRIO` | Claude Code |
+| **Fase 3** | **Pipeline Multimodal & Forense Digital:** Extração de mídia (`yt-dlp` + FFmpeg), transcrição temporal (Whisper), validação C2PA/EXIF e Dockerização | `EM PROGRESSO` | Claude Code |
 | **Fase 4** | **Motor de Contexto e Adaptação de Audiência:** `verdict_engine.py` com relatórios em três modos (`general_family`, `journalism_student`, `law_academic`) | `BACKLOG` | Claude Code |
-| **Fase 5** | **Testes Alfa e Interface de Validação:** Testes integrados ponta a ponta com `pytest`, rota funcional no FastAPI e playground web | `BACKLOG` | Claude Code |
+| **Fase 5** | **Testes Alfa e Consolidação de Release:** Suíte completa de testes E2E, documentação e empacotamento da release Alpha 1.0 | `BACKLOG` | Claude Code |
 
 ---
 
 ## 🎯 FASE 2: Conectores de Fontes Primárias Multidisciplinares
 
-**Status da Fase**: `PRONTO PARA REVISÃO DO ANTIGRAVITY`  
-Status: PRONTO PARA REVISÃO DO ANTIGRAVITY  
+**Status da Fase**: `AGUARDANDO VALIDAÇÃO DO USUÁRIO`  
 **Responsável**: Claude Code (Engenheiro Executor)  
-**Meta**: Expandir o Veritas Engine para além do factual político básico, dotando o sistema de conectores assíncronos e resilientes para checagem em Saúde/Ciência, Geopolítica Global, Direito/Justiça, Governos (BR/FR) e Histórico da Web.
+**Meta**: Expandir o Veritas Engine para além do factual político básico, dotando o sistema de conectores assíncronos e resilientes para checagem em Saúde/Ciência, Geopolítica Global, Direito/Justiça, Clima/Ambiente, Governos (BR/FR), Histórico da Web e App do Cidadão acessível a custo zero.
 
 ---
 
@@ -125,6 +124,75 @@ Status: PRONTO PARA REVISÃO DO ANTIGRAVITY
 
 ---
 
+## 🎯 FASE 3: Pipeline Multimodal & Forense Digital
+
+**Status da Fase**: `EM PROGRESSO`  
+**Responsável**: Claude Code (Engenheiro Executor)  
+**Meta**: Dotar o Veritas Engine da capacidade de ingerir e periciar mídias complexas (vídeos, áudios e imagens/fotos) e URLs externas (YouTube, TikTok, X, etc.), realizando extração de áudio/frames, transcrição temporal alinhada (Whisper), perícia EXIF e validação de proveniência criptográfica (C2PA) para detecção de IA.
+
+---
+
+### [TASK 3.1] Ambiente de Execução & Containerização (FFmpeg, ExifTool, Docker)
+- [ ] Criar `backend/Dockerfile` multi-stage:
+  - Base Python 3.11+ slim.
+  - Instalação das ferramentas de sistema: `ffmpeg`, `exiftool`, `libmagic`.
+  - Instalação de dependências Python (`requirements.txt` + `yt-dlp`, `c2pa-python`).
+- [ ] Criar `docker-compose.yml` na raiz com o backend e volume temporário de mídia.
+- [ ] Adicionar helper no backend checando a disponibilidade de `ffmpeg` e `exiftool` no SO com logs claros e graceful degradation caso ausentes em ambiente Windows/bare-metal.
+
+---
+
+### [TASK 3.2] Orquestrador Forense de Mídia (`forensics/media_inspector.py`)
+- [ ] Criar módulo `backend/app/forensics/media_inspector.py`:
+  - Ingestão de upload de arquivo (`UploadFile`) ou download seguro via `yt-dlp` de URL externa (com limite de duração e tamanho máx de 50 MB).
+  - Extração da faixa de áudio em WAV mono 16kHz via FFmpeg.
+  - Amostragem inteligente de keyframes (quadros representativos) via FFmpeg.
+  - Extração e sanitização de metadados EXIF com `exiftool` (data, câmera, geolocalização se presente, software de edição).
+- [ ] Retornar modelo Pydantic `MediaForensicsReport`.
+
+---
+
+### [TASK 3.3] Validador de Proveniência Criptográfica C2PA (`forensics/c2pa_validator.py`)
+- [ ] Criar módulo `backend/app/forensics/c2pa_validator.py`:
+  - Inspeção do manifesto JUMBF de proveniência em imagens (JPEG, PNG, WebP) e vídeos.
+  - Integração via `c2pa-python` (ou fallback via subprocess `c2patool`).
+  - Identificação de geradores de IA (DALL-E, Midjourney, Adobe Firefly, etc.) e assinaturas de captura original.
+- [ ] Retorno integrado no laudo pericial da mídia.
+
+---
+
+### [TASK 3.4] Transcrição Temporal com Timestamps (`forensics/audio_transcriber.py`)
+- [ ] Criar módulo `backend/app/forensics/audio_transcriber.py`:
+  - Transcrição com alinhamento temporal (`start_time`, `end_time`, `text`) gerando blocos cronológicos.
+  - Suporte a 3 motores (Free-Tier first):
+    1. Whisper Local via `faster-whisper` / `whisper` (offline, custo zero).
+    2. Provedores BYOK com suporte a áudio multimodal (Gemini ou OpenAI Whisper API).
+    3. Fallback gracioso se nenhum motor de áudio estiver configurado.
+  - Identificação de afirmações com marcação de minutagem (ex: *"Aos 01:23 do vídeo: ..."*).
+
+---
+
+### [TASK 3.5] Endpoints REST de Mídia & Integração com o App do Cidadão
+- [ ] Criar rota `POST /api/v1/fact-check/media` em `backend/app/api/v1/fact_check.py`:
+  - Aceita `multipart/form-data` com arquivo de mídia ou URL externa.
+  - Roda perícia forense (EXIF, C2PA), transcrição e despacha afirmações para o motor de checagem.
+- [ ] Atualizar o App do Cidadão (`backend/app/web/`):
+  - Drag & drop para vídeos e áudios, e campo para colar URL de vídeo.
+  - Visualização da timeline com vereditos por trecho do vídeo/áudio.
+
+---
+
+### [TASK 3.6] Testes Automatizados Forenses & Handover
+- [ ] Criar testes unitários com mocks em `backend/tests/test_media_forensics.py`:
+  - Teste de metadados EXIF sintéticos.
+  - Teste de manifesto C2PA com fixture assinado/não assinado.
+  - Teste de transcrição e segmentação temporal.
+  - Teste da rota `POST /api/v1/fact-check/media`.
+- [ ] Garantir 100% de aprovação na suíte de testes (`pytest backend/tests -v`).
+- [ ] Atualizar status para `PRONTO PARA REVISÃO DO ANTIGRAVITY`.
+
+---
+
 ## 📝 Registro de Handovers e Comunicação
 
 ### 1. Parecer de Auditoria da Fase 1 (Antigravity - Gemini)
@@ -139,7 +207,24 @@ Status: PRONTO PARA REVISÃO DO ANTIGRAVITY
 
 ---
 
-### 2. Notas de Entrega do Claude Code (Fase 2)
+### 2. Parecer de Auditoria da Fase 2 (Antigravity - Gemini)
+
+- **Status da Auditoria**: `APROVADO COM LOUVOR & LIBERADO PARA TESTE DO USUÁRIO`
+- **Data da Avaliação**: 2026-10-15
+- **Avaliação de Arquitetura e Engenharia**:
+  - **Amplitude de Fontes**: Entrega exemplar de 7 conectores multidisciplinares assíncronos (`br_gov`, `fr_gov`, `science_health`, `legal_justice`, `global_geopolitics`, `web_archive` e a excelente extensão proativa `climate_environment` com Copernicus/NOAA).
+  - **Princípio Custo Zero**: Implementação primorosa da TASK 2.6 (Modo Cidadão). A consulta direta sem chave funciona com tempo de resposta de 0.2s a 1.3s com fontes oficiais reais.
+  - **App do Cidadão (`app/web/`)**: Aprovado como interface oficial leve do Veritas Alpha 1.0. A solução de OCR no cliente com Tesseract.js sob demanda é genial por manter custo zero de servidor e privacidade total.
+  - **Decisões Técnicas Homologadas**:
+    1. *STJ Precedentes*: Exceção de timeout de 30s aprovada para downloads em lote com cache de 24h e warm-up em background.
+    2. *GDELT & Wayback*: Política de best-effort mantida com fallback gracioso para garantir resiliência.
+    3. *Dockerfile & Docker Compose*: Encaixados oficialmente na Fase 3 como Task 3.1.
+  - **Qualidade de Testes**: **215 testes unitários e de integração passando com 100% de sucesso**.
+- **Decisão**: `FASE 2 HOMOLOGADA. STATUS ALTERADO PARA 'AGUARDANDO VALIDAÇÃO DO USUÁRIO'. LIBERADA FASE 3 (PIPELINE MULTIMODAL & FORENSE) PARA O CLAUDE CODE.`
+
+---
+
+### 3. Notas de Entrega do Claude Code (Fase 2)
 
 - **Status da Entrega**: `PRONTO PARA REVISÃO DO ANTIGRAVITY`
 - **Data da Entrega**: 2026-10-14
@@ -184,11 +269,40 @@ Status: PRONTO PARA REVISÃO DO ANTIGRAVITY
 
 ---
 
-### 3. Validação do Usuário & Publicação Remota (Fase 2)
+#### Adendo 2026-10-15: App do cidadão (pedido direto do usuário durante a validação)
+- **Contexto**: ao testar, o usuário pediu uma interface bonita e simples em vez do Swagger: texto de um lado, resultado visual do outro, com fontes, tradução e entrada por imagem.
+- **Entregue**: página única em `backend/app/web/` (`index.html`, `styles.css`, `app.js`; ~73 KB, sem build nem framework), servida em `GET /`. O Swagger continua em `/docs`.
+  - Entrada por texto, **print/foto** (OCR Tesseract.js no navegador, carregado sob demanda: custo zero) e **link da fonte** (novo campo opcional `source_url` em `POST /api/v1/fact-check/text`, auditado na Wayback).
+  - Resultado visual: selo do veredito, medidor de confiança, citações `[E1]` clicáveis, cartões de fontes por área com DOI/PMID/data, botão **Traduzir** (Translator API do navegador com tempo-limite; senão, link do Google Tradutor), compartilhamento no WhatsApp e **cartão PNG**.
+  - Responsiva (celular/desktop), modo escuro automático, `prefers-reduced-motion`, dados externos sempre inseridos como texto (nunca HTML).
+  - Arquivos estáticos com `Cache-Control: no-cache` (revalidação por ETag), para ninguém ficar com versão antiga após atualizações.
+- **Testes**: 200 passed (novos: página e assets servidos, ausência de injeção de HTML no JS, validação de `source_url`). Verificação manual no navegador: desktop e celular, resultado com e sem IA (simulado), OCR de um print real (100% do texto) e geração do cartão PNG.
+- **Ponto para o Antigravity**: esta página antecipa parte da "interface de validação" prevista no roadmap (Fase 5), sem Next.js. Sugiro decidir se ela vira a base da interface oficial ou se continua como página leve de validação. Limitação observada: sem IA, boatos com palavras genéricas podem não achar fontes (a busca por palavras-chave é literal); com Gemini/Groq gratuitos a triagem melhora.
+
+---
+
+#### Adendo 2026-10-15 (2): correções a partir dos testes reais do usuário
+- **Nova área "Clima e ambiente"** (`app/connectors/climate_environment.py`, domínio `climate_environment`): Copernicus C3S/ECMWF (ERA5 diário, "Climate Pulse") e NOAA NCEI (anomalias anuais), sem chave. Calculam médias anuais, ranking dos anos mais quentes, anos-recorde e recordes consecutivos. Motivo: o teste do usuário sobre o Copernicus não tinha nenhuma fonte climática. Validado ao vivo: ambas confirmam 2023 e 2024 como recordes consecutivos; 2025 em 3º lugar. **Extensão de escopo para avaliação do Antigravity** (é um 7º módulo de conectores).
+- **IA que falhava em silêncio**: o usuário ativou o Groq e o resultado voltou sem IA, com o motivo escondido. Correções:
+  - `POST /api/v1/byok/test` testa a chave na hora; a página só ativa a IA se o teste passar e mostra o erro em linguagem simples;
+  - alerta visível no resultado quando a IA falha;
+  - opção "Lembrar neste aparelho" (localStorage, desligada por padrão);
+  - log no servidor do motivo da falha (sem a chave);
+  - validação tolerante das respostas de modelos abertos (ids `[1, 2]` → `E1, E2`, `"85%"`, `"true"`, listas longas, país/idioma por extenso).
+- **Modelo Gemini padrão**: `gemini-flash-latest` (apelido do Google para o Flash atual), em vez de `gemini-2.5-flash`.
+- **Afirmações vagas** (acontecimentos sem lugar/data/autor): dica visível pedindo detalhes, em vez de busca vazia sem explicação.
+- **Busca sem IA**: palavras genéricas ignoradas ("vídeos", "redes sociais", "confirmando"...), glossário PT/FR→EN ampliado (geopolítica, clima); "União Europeia" sozinha não aciona mais a área jurídica.
+- **Ordem das fontes**: fontes dedicadas ao tema aparecem primeiro; fontes amplas (PubMed) ficam limitadas a 3 quando as dedicadas já responderam.
+- **GDELT**: intervalo mínimo de 5,5 s entre chamadas e pausa de 60 s após HTTP 429 (evita bloqueio).
+- **Testes**: 215 passed (novo `tests/test_climate_and_ai_robustness.py`). Verificado no navegador: afirmação do Copernicus, teste de chave inválida (erro claro, IA não ativada) e alerta de falha da IA no resultado.
+
+---
+
+### 4. Validação do Usuário & Publicação Remota (Fase 2)
 *(Preenchido após o gatilho de aprovação do usuário)*
 
 - **Status de Publicação**: `PENDENTE`
 - **Instruções de Teste Apresentadas**:
 - **Aprovação do Usuário**: [ ] SIM | [ ] NÃO
 - **Commit Hash**:
-- **Branch / Repositório Remoto**: `main`
+- **Branch / Repositório Remoto**: `feat/fase-2-fontes-primarias` (local, tag `v0.2.0-rc.1`). `main` permanece igual a `origin/main` (Fase 1) até a aprovação; o merge em `main` e o push acontecem após a validação do usuário.

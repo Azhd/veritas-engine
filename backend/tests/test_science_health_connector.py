@@ -157,7 +157,7 @@ class TestPubMed:
             parse_abstracts(bomb)
 
     def test_domain_metadata(self):
-        assert PubMedConnector.domains == {Domain.HEALTH_SCIENCE}
+        assert PubMedConnector.domains == {Domain.HEALTH_SCIENCE, Domain.CLIMATE_ENVIRONMENT}
 
 
 WHO_INDICATORS = {

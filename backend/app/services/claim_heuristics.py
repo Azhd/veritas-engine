@@ -42,6 +42,16 @@ _STOPWORDS = _PT_WORDS | _FR_WORDS | {
     "causa", "causam", "provoca", "todos", "todas", "muito", "pode", "podem", "vai", "fazer",
     "cause", "tous", "fait", "peut", "plus", "selon", "segundo", "disse", "afirma", "http",
     "https", "www", "verdade", "mentira", "vrai", "faux", "depuis", "double", "dobrou",
+    "video", "videos", "foto", "fotos", "imagem", "imagens", "redes", "sociais", "social",
+    "afirmam", "afirmou", "dizem", "diz", "mostrando", "mostra", "mostram", "recente",
+    "recentes", "massa", "inteira", "inteiro", "mensagem", "noticia", "post", "posts",
+    "compartilhe", "compartilhar", "urgente", "atencao", "alerta", "circula", "circulam",
+    "viral", "whatsapp", "facebook", "instagram", "tiktok", "youtube", "twitter", "pessoas",
+    "gente", "agora", "hoje", "ontem", "semana", "segunda", "terca", "quarta", "quinta",
+    "sexta", "sabado", "domingo", "feira", "partir", "vao", "sera", "serao", "ainda",
+    "photos", "images", "reseaux", "sociaux", "montrent", "affirment",
+    "confirmando", "confirma", "confirmou", "divulgou", "divulga", "relatorio",
+    "relatorios", "ultimos", "ultimas", "observatorio", "consecutivos",
 }  # fmt: skip
 
 
@@ -104,7 +114,7 @@ _DOMAIN_TRIGGERS: dict[Domain, tuple[str, ...]] = {
         "lei ", "loi ", "decreto", "decret", "stf", "stj", "supremo", "tribunal", "sumula",
         "jurisprud", "constitui", "inconstitucional", "codigo penal", "code penal", "crime",
         "cour de cassation", "juiz", "juge", "julgament", "direito", "droit", "diretiva",
-        "directive", "uniao europeia", "union europeenne", "regulamento", "reglement", "ilegal",
+        "directive", "regulamento europeu", "reglement europeen", "ilegal",
         "illegal", "proibid", "interdit", "medida provisoria",
     ),
     Domain.ECONOMY_STATISTICS: (
@@ -112,6 +122,13 @@ _DOMAIN_TRIGGERS: dict[Domain, tuple[str, ...]] = {
         "population", "habitantes", "salario", "salaire", "imposto", "impot", "orcamento",
         "budget", "divida", "dette", "pobreza", "pauvrete", "renda", "revenu", "economia",
         "economie", "precos", "prix",
+    ),
+    Domain.CLIMATE_ENVIRONMENT: (
+        "clima", "climat", "aquecimento", "rechauffement", "temperatura", "temperature",
+        "onda de calor", "canicule", "efeito estufa", "effet de serre", "co2", "carbono",
+        "carbone", "copernicus", "el nino", "degelo", "geleira", "glacier", "nivel do mar",
+        "niveau de la mer", "desmatamento", "deforestation", "emissoes", "emissions",
+        "acordo de paris", "accord de paris", "ipcc", "giec", "seca", "secheresse",
     ),
     Domain.POLITICS_LEGISLATION: (
         "deputad", "senador", "senat", "projeto de lei", "votac", "vote", "congresso",
@@ -155,6 +172,29 @@ GLOSSARY_EN: dict[str, str] = {
     "israel": "israel", "sudao": "sudan", "soudan": "sudan", "fome": "hunger", "faim": "hunger",
     "desmatamento": "deforestation", "deforestation": "deforestation",
     "genocidio": "genocide", "genocide": "genocide", "sancoes": "sanctions",
+    "ajuda humanitaria": "humanitarian aid", "aide humanitaire": "humanitarian aid",
+    "comboio humanitario": "humanitarian convoy", "comboio": "convoy", "convoi": "convoy",
+    "humanitario": "humanitarian", "humanitaire": "humanitarian", "militar": "military",
+    "militaire": "military", "exercito": "army", "armee": "army", "ataque": "attack",
+    "attaque": "attack", "bombardeio": "bombing", "bombardement": "bombing",
+    "missil": "missile", "missile": "missile", "drone": "drone", "explosao": "explosion",
+    "explosion": "explosion", "destruida": "destroyed", "destruido": "destroyed",
+    "detruite": "destroyed", "escombros": "rubble", "decombres": "rubble",
+    "terremoto": "earthquake", "seisme": "earthquake", "enchente": "flood",
+    "inondation": "flood", "incendio": "wildfire", "furacao": "hurricane",
+    "refem": "hostage", "refens": "hostages", "otage": "hostage", "mortos": "killed",
+    "vitimas": "casualties", "victimes": "casualties", "hospital": "hospital",
+    "venezuela": "venezuela", "china": "china", "chine": "china", "ira": "iran",
+    "libano": "lebanon", "liban": "lebanon", "siria": "syria", "syrie": "syria",
+    "iemen": "yemen", "yemen": "yemen", "haiti": "haiti", "taiwan": "taiwan",
+    "coreia do norte": "north korea", "coree du nord": "north korea",
+    "estados unidos": "united states", "etats-unis": "united states",
+    "aquecimento global": "global warming", "rechauffement climatique": "global warming",
+    "temperatura media global": "global mean temperature", "temperatura": "temperature",
+    "temperature": "temperature", "onda de calor": "heatwave", "canicule": "heatwave",
+    "recordes": "record", "recorde": "record", "record": "record", "efeito estufa":
+    "greenhouse effect", "nivel do mar": "sea level", "geleiras": "glaciers",
+    "emissoes": "emissions", "seca": "drought", "secheresse": "drought",
 }  # fmt: skip
 
 
@@ -168,6 +208,42 @@ def translate_terms(claim: str, limit: int = 4) -> list[str]:
                 found.append(english)
             text = text.replace(source, " ")
     return found[:limit]
+
+
+# ---------------------------------------------------------------------- vagueness
+_SPECIFIC_RE = re.compile(r"\d")
+
+
+def is_vague(claim: str, domains: list[Domain] | None = None) -> bool:
+    """True when an *event* claim names no place, person, date, number, link or law.
+
+    Such claims ("a city was destroyed in a recent attack") cannot be cross-checked by any
+    source; the user is asked for specifics instead of receiving an empty search. General
+    claims ("vaccines cause autism") are checkable as they are and never flagged.
+    """
+    domains = heuristic_domains(claim) if domains is None else domains
+    if Domain.GEOPOLITICS not in domains:
+        return False
+    text = _URL_RE.sub(" ", claim)
+    if extract_urls(claim) or parse_legal_references([claim]) or _SPECIFIC_RE.search(text):
+        return False
+    words = re.findall(r"[\wÀ-ÿ-]+", text)
+    proper = [
+        w
+        for i, w in enumerate(words)
+        if i > 0 and w[:1].isupper() and normalize(w) not in _STOPWORDS and len(w) > 2
+    ]
+    if proper:
+        return False
+    normalized = f" {normalize(claim)} "
+    return not any(marker in normalized for marker in (*_BR_MARKERS, *_FR_MARKERS))
+
+
+VAGUE_CLAIM_TIP = (
+    "A afirmação não diz onde, quando nem quem: assim nenhuma fonte consegue confirmar ou "
+    "desmentir. Acrescente o nome da cidade ou do país, a data aproximada ou quem está "
+    "envolvido e verifique de novo."
+)
 
 
 # ---------------------------------------------------------------------- full analysis

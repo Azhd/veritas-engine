@@ -14,7 +14,7 @@ saúde (PubMed, OMS), geopolítica (ONU, GDELT) e arquivos da web (Internet Arch
 Dada uma alegação, identifique:
 - country: "BR", "FR", "AMBOS" ou "DESCONHECIDO" (país a que a alegação se refere);
 - domains: áreas envolvidas, entre "politics_legislation", "economy_statistics", \
-"health_science", "geopolitics", "legal_justice", "web_history";
+"health_science", "geopolitics", "legal_justice", "web_history", "climate_environment";
 - keywords: 2 a 6 termos de busca curtos no idioma oficial do país de contexto \
 (ex.: "reforma tributária", "chômage");
 - keywords_en: os mesmos termos em inglês, para bases internacionais (ex.: "vaccine autism");

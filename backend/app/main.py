@@ -10,11 +10,15 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
 
 from app.api.v1 import byok, connectors, fact_check
 from app.connectors.registry import build_connectors, warm_up
@@ -22,6 +26,20 @@ from app.core.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
 from app.engines.factory import ProviderFactory
 from app.services.fact_checker import FactCheckService
+
+#: Citizen web app (static HTML/CSS/JS, no build step) served at ``/``.
+WEB_DIR = Path(__file__).parent / "web"
+#: Browsers otherwise cache the assets heuristically and keep stale versions after an update;
+#: ``no-cache`` still lets them reuse the file after a cheap ETag check (HTTP 304).
+REVALIDATE_HEADERS = {"Cache-Control": "no-cache"}
+
+
+class RevalidatingStaticFiles(StaticFiles):
+    def file_response(self, *args: Any, **kwargs: Any) -> Response:
+        response = super().file_response(*args, **kwargs)
+        response.headers.update(REVALIDATE_HEADERS)
+        return response
+
 
 API_DESCRIPTION = """
 Verificação de fatos em **fontes primárias**: governos do Brasil e da França, leis e
@@ -130,8 +148,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return HTMLResponse(html)
 
     @app.get("/", include_in_schema=False)
-    async def root() -> RedirectResponse:
-        return RedirectResponse(url="/docs")
+    async def web_app() -> FileResponse:
+        return FileResponse(
+            WEB_DIR / "index.html", media_type="text/html", headers=REVALIDATE_HEADERS
+        )
+
+    app.mount("/static", RevalidatingStaticFiles(directory=WEB_DIR), name="static")
 
     @app.get("/healthz", tags=["health"], summary="Health check")
     async def healthz() -> dict[str, str]:

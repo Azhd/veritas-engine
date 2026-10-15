@@ -52,7 +52,7 @@ class PubMedConnector(BaseGovConnector):
     country = Country.GLOBAL
     publisher = "PubMed - National Library of Medicine (NCBI/NIH)"
     base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
-    domains = frozenset({Domain.HEALTH_SCIENCE})
+    domains = frozenset({Domain.HEALTH_SCIENCE, Domain.CLIMATE_ENVIRONMENT})
 
     def __init__(
         self,

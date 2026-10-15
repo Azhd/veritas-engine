@@ -348,10 +348,43 @@ def test_heuristic_keywords_drop_stopwords():
 
 
 # =============================================================== developer experience (Swagger)
-def test_root_redirects_to_docs(client):
-    response = client.get("/", follow_redirects=False)
-    assert response.status_code in (302, 307)
-    assert response.headers["location"] == "/docs"
+def test_root_serves_citizen_web_app(client):
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    html = response.text
+    assert 'id="checkForm"' in html and 'id="resultPanel"' in html
+    assert "/static/app.js" in html and "/static/styles.css" in html
+
+
+@pytest.mark.parametrize(
+    ("path", "content_type"),
+    [("/static/app.js", "javascript"), ("/static/styles.css", "text/css")],
+)
+def test_web_assets_are_served(client, path, content_type):
+    response = client.get(path)
+    assert response.status_code == 200
+    assert content_type in response.headers["content-type"]
+
+
+def test_web_app_never_injects_api_data_as_html(client):
+    # Source excerpts come from third parties: the page must render them as text only.
+    script = client.get("/static/app.js").text
+    assert "innerHTML" not in script
+    assert "insertAdjacentHTML" not in script
+
+
+def test_source_url_is_audited_and_validated(client):
+    response = client.post(
+        ENDPOINT,
+        json={"claim": "A inflação passou de 10%.", "source_url": "https://boato.example.com/x"},
+    )
+    assert response.status_code == 200
+    assert "web_history" in response.json()["domains"]
+    bad = client.post(
+        ENDPOINT, json={"claim": "A inflação passou de 10%.", "source_url": "ftp://x"}
+    )
+    assert bad.status_code == 422
 
 
 def test_openapi_exposes_byok_headers_as_authorize_schemes(client):

@@ -368,7 +368,7 @@ async def test_registry_shares_client_and_cache():
     connectors, client = build_connectors(settings)
     try:
         ids = [c.source_id for c in connectors]
-        assert len(ids) == len(set(ids)) == 16
+        assert len(ids) == len(set(ids)) == 18
         assert {"br.camara", "br.senado", "br.ibge", "fr.data_gouv", "fr.insee"} <= set(ids)
         assert len({id(c.cache) for c in connectors}) == 1
         assert all(c.timeout_seconds == 5 for c in connectors)

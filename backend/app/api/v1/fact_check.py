@@ -95,5 +95,9 @@ async def fact_check_text(
     service: Annotated[FactCheckService, Depends(get_fact_check_service)],
 ) -> FactCheckReport:
     return await service.check_text(
-        body.claim, selection.provider, country_override=body.country, notes=selection.notes
+        body.claim,
+        selection.provider,
+        country_override=body.country,
+        notes=selection.notes,
+        source_url=body.source_url,
     )

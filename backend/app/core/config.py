@@ -25,6 +25,8 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        # Blank values in .env (e.g. "VERITAS_DEFAULT_PROVIDER=") mean "use the default".
+        env_ignore_empty=True,
     )
 
     app_name: str = "Veritas Engine"
@@ -44,7 +46,7 @@ class Settings(BaseSettings):
     groq_api_key: SecretStr | None = None
     ollama_base_url: str = "http://localhost:11434"
 
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-flash-latest"  # Google alias: always the current free-tier Flash
     anthropic_model: str = "claude-sonnet-5-5"
     openai_model: str = "gpt-4o"
     groq_model: str = "llama-3.3-70b-versatile"

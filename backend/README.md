@@ -24,7 +24,21 @@ python -m venv .venv
 .venv/Scripts/python -m uvicorn app.main:app --reload
 ```
 
-- Swagger: `http://127.0.0.1:8000/docs` (a raiz `/` redireciona para lá) · ReDoc: `/redoc` · Health: `GET /healthz`
+- **App do cidadão: `http://127.0.0.1:8000/`** · Swagger (desenvolvedores): `/docs` · ReDoc: `/redoc` · Health: `GET /healthz`
+
+## App do cidadão (`/`)
+
+Página única e responsiva (HTML/CSS/JS puros em `app/web/`, ~73 KB, sem build nem dependências):
+
+- **Entrada:** texto, **print/foto** (o texto é lido no próprio aparelho por OCR gratuito, o Tesseract.js,
+  baixado só quando uma imagem é enviada) e o **link de onde a informação veio** (auditado na Wayback Machine).
+- **Resultado:** selo do veredito, medidor de confiança (com IA), resumo com citações `[E1]` clicáveis
+  e cartões das fontes oficiais com área, data, DOI/PMID e link oficial.
+- **Tradução:** fontes em inglês/francês têm o botão "Traduzir" (tradutor do próprio navegador quando
+  disponível; senão, link para o Google Tradutor).
+- **Compartilhar:** mensagem pronta para o WhatsApp, cópia do resumo e **cartão em imagem (PNG)**.
+- **IA opcional:** botão "Grátis · sem IA" no topo; Gemini/Groq/Ollama com passo a passo. A chave fica
+  só na memória da aba.
 
 ## Testando pelo Swagger (`/docs`)
 

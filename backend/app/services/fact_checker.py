@@ -47,12 +47,19 @@ from app.schemas.fact_check import (
     SourceReference,
     Verdict,
 )
-from app.services.claim_heuristics import enrich_analysis, heuristic_analysis
+from app.services.claim_heuristics import (
+    VAGUE_CLAIM_TIP,
+    enrich_analysis,
+    heuristic_analysis,
+    is_vague,
+)
 
 logger = logging.getLogger(__name__)
 
 #: Upper bound for confidence when the verdict had to be downgraded for lack of citations.
 DOWNGRADED_CONFIDENCE_CAP = 0.5
+#: Max items from broad sources (e.g. PubMed) once dedicated sources already answered.
+SECONDARY_RESULTS_CAP = 3
 #: Provider failures that switch the request to citizen mode instead of returning an error.
 AI_FAILURES = (
     ProviderConfigurationError,
@@ -87,6 +94,7 @@ class FactCheckService:
         country_override: CountryContext | None = None,
         *,
         notes: list[str] | None = None,
+        source_url: str | None = None,
     ) -> FactCheckReport:
         notes = list(notes or [])
 
@@ -102,6 +110,13 @@ class FactCheckService:
         if country_override is not None:
             analysis.country = country_override
         analysis = enrich_analysis(analysis, claim)
+        if source_url and source_url not in analysis.urls:
+            # The user-provided origin of the claim is always audited in the web archive.
+            urls = [source_url, *analysis.urls][:5]
+            domains = list(dict.fromkeys([*analysis.domains, Domain.WEB_HISTORY]))
+            analysis = analysis.model_copy(update={"urls": urls, "domains": domains})
+        if not source_url and is_vague(claim, analysis.domains):
+            notes.insert(0, VAGUE_CLAIM_TIP)
 
         # 3. evidence retrieval
         evidence, queried, failures = await self.collect_evidence(analysis)
@@ -205,9 +220,10 @@ class FactCheckService:
             *(c.search_evidence(query) for c in selected), return_exceptions=True
         )
 
-        evidence: list[Evidence] = []
         failures: list[ConnectorFailure] = []
-        seen: set[str] = set()
+        dedicated: list[list[Evidence]] = []
+        secondary: list[list[Evidence]] = []
+        domains = set(analysis.domains) or set(DEFAULT_DOMAINS)
         for connector, result in zip(selected, results, strict=True):
             if isinstance(result, BaseException):
                 if not isinstance(result, Exception):
@@ -220,11 +236,19 @@ class FactCheckService:
                 )
                 failures.append(ConnectorFailure(connector=connector.source_id, error=message))
                 continue
-            for item in result:
-                key = f"{item.url}|{item.title}"
-                if key not in seen:
-                    seen.add(key)
-                    evidence.append(item)
+            # Sources dedicated to the claim's areas (e.g. Copernicus for a climate claim) come
+            # first; broad sources that merely overlap (e.g. PubMed) come after them.
+            (dedicated if connector.domains <= domains else secondary).append(result)
+        if any(dedicated):
+            secondary = [items[:SECONDARY_RESULTS_CAP] for items in secondary]
+
+        evidence: list[Evidence] = []
+        seen: set[str] = set()
+        for item in (item for items in [*dedicated, *secondary] for item in items):
+            key = f"{item.url}|{item.title}"
+            if key not in seen:
+                seen.add(key)
+                evidence.append(item)
         return evidence[: self.max_evidence], [c.source_id for c in selected], failures
 
     # ------------------------------------------------------------------ citizen mode
@@ -281,6 +305,7 @@ def citizen_explanation(count: int, language: str) -> str:
 
 
 def _ai_failure_note(exc: VeritasError) -> str:
+    logger.warning("AI provider failed, falling back to citizen mode: %s", exc.message)
     return f"IA indisponível ({exc.message.rstrip('.')}). Exibindo os dados oficiais brutos."
 
 

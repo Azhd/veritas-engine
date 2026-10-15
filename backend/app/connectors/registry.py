@@ -14,6 +14,7 @@ from app.connectors.br_gov import (
     SenadoConnector,
     TransparenciaConnector,
 )
+from app.connectors.climate_environment import CopernicusClimateConnector, NoaaClimateConnector
 from app.connectors.fr_gov import DataGouvConnector, InseeConnector, LegifranceConnector
 from app.connectors.global_geopolitics import GdeltConnector, ReliefWebConnector
 from app.connectors.legal_justice import (
@@ -49,6 +50,8 @@ CONNECTOR_CLASSES: tuple[type[BaseGovConnector], ...] = (
     WhoGhoConnector,
     GdeltConnector,
     ReliefWebConnector,
+    CopernicusClimateConnector,
+    NoaaClimateConnector,
     WaybackConnector,
 )
 
