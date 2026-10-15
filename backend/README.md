@@ -1,4 +1,4 @@
-# Veritas Engine — Backend (Alpha 1.2 + Fase 3)
+# Veritas Engine — Backend (Alpha 1.3)
 
 API FastAPI de fact-checking em **fontes primárias** (governos do Brasil e da França, leis e
 jurisprudência, ciência e saúde, clima, geopolítica e memória da web), com IA opcional via **BYOK**,

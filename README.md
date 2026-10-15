@@ -17,10 +17,9 @@
   com carimbo (**CONFIRMADO** em verde ou **FALSO** em vermelho) e uma régua de Falso a Verdadeiro.
 - Leve: cada página tem cerca de 130 KB e funciona no celular.
 
-> **Status:** versão **Alpha 1.2** (tag `v1.2.0-alpha`) publicada na `main`. A **Fase 3** (perícia de
-> vídeo, áudio e imagens) está pronta para revisão na branch `feat/fase-3-forense-multimodal`
-> (tag `v1.3.0-rc.1`). As páginas em 3 idiomas e o destaque de confiança estão em validação na
-> branch `feat/multilingue-confiance`.
+> **Status:** versão **Alpha 1.3** (tag `v1.3.0-alpha`) publicada na `main`: perícia de vídeo, áudio e
+> imagens (Fase 3), páginas em português, inglês e francês e destaque da confiança. Próxima etapa:
+> Fase 4 (relatórios por público).
 
 ---
 
@@ -162,7 +161,7 @@ outras.
 | --- | --- | --- |
 | 1 | Fundação: API, motor de IA "traga sua própria chave" (Gemini, Groq, Ollama, Claude, OpenAI) | Publicada |
 | 2 | Fontes primárias em 7 áreas, modo cidadão sem chave e app web | Publicada (Alpha 1.2) |
-| 3 | Vídeo, áudio e imagens: transcrição com minutagem, metadados EXIF, detecção de IA (C2PA), Docker | Pronta para revisão |
+| 3 | Vídeo, áudio e imagens: transcrição com minutagem, metadados EXIF, detecção de IA (C2PA), Docker; páginas PT/EN/FR | Publicada (Alpha 1.3) |
 | 4 | Relatórios por público: família, estudante de jornalismo, área jurídica/acadêmica | Planejada |
 | 5 | Testes completos e release Alpha 1.0 | Planejada |
 
@@ -172,6 +171,8 @@ O andamento detalhado de cada fase está no [TASK_BOARD.md](TASK_BOARD.md).
 
 | Tag | Conteúdo |
 | --- | --- |
+| `v1.3.0-alpha` | **Alpha 1.3** (Fase 3 validada): perícia de mídia (C2PA, EXIF, quadros, transcrição com minutagem), Docker, páginas PT/EN/FR, régua e carimbo de confiança, busca no EUR-Lex por palavras |
+| `v1.3.0-rc.1` | Candidata a release da Fase 3 (antes das páginas em 3 idiomas) |
 | `v1.2.0-alpha` | **Alpha 1.2** (Fase 2 validada): fontes primárias em 7 áreas, modo cidadão, app web, clima, diagnóstico de chaves e escolha automática de modelo de IA |
 | `v0.2.0-rc.1` | Candidata a release da Fase 2 (antes da validação) |
 
