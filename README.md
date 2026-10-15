@@ -10,9 +10,9 @@
   informação veio**.
 - Leve: a página inteira tem cerca de 80 KB e funciona no celular.
 
-> **Status:** Alpha 1.0 em desenvolvimento. A versão mais recente está na branch
-> [`feat/fase-2-fontes-primarias`](https://github.com/Azhd/veritas-engine/tree/feat/fase-2-fontes-primarias)
-> (tag `v0.2.0-rc.1`). A `main` contém a versão estável anterior (Fase 1).
+> **Status:** versão **Alpha 1.2** (tag `v1.2.0-alpha`) publicada na `main`: fontes primárias em
+> 7 áreas, modo cidadão sem chave e app web. A Fase 3 (vídeo, áudio e perícia de imagens) está em
+> desenvolvimento na branch `feat/fase-3-forense-multimodal`.
 
 ---
 
@@ -25,9 +25,9 @@ na instalação, marque **"Add python.exe to PATH"**) e do **Git**.
    ```powershell
    git clone https://github.com/Azhd/veritas-engine.git
    cd veritas-engine
-   git switch feat/fase-2-fontes-primarias
    ```
-   Se você já tem o projeto, entre na pasta dele e atualize com `git pull`.
+   Se você já tem o projeto, entre na pasta dele e atualize com `git switch main` e depois
+   `git pull`.
 2. **Entre na pasta do backend:**
    ```powershell
    cd backend
@@ -50,7 +50,7 @@ na instalação, marque **"Add python.exe to PATH"**) e do **Git**.
 | "a execução de scripts foi desabilitada" | `powershell -ExecutionPolicy Bypass -File .\run.ps1` |
 | A porta 8000 já está em uso | `.\run.ps1 -Port 8001` e abra `http://127.0.0.1:8001` |
 | "python não é reconhecido" | Reinstale o Python marcando **"Add python.exe to PATH"** |
-| O app abriu sem as novidades | Rode `git branch`: a branch com `*` deve ser `feat/fase-2-fontes-primarias` |
+| O app abriu sem as novidades | Rode `git switch main` e `git pull`, e reinicie o app |
 | A página parece antiga | Recarregue com **Ctrl + F5** |
 
 ---
@@ -104,9 +104,9 @@ outras.
 
 | Fase | Conteúdo | Status |
 | --- | --- | --- |
-| 1 | Fundação: API, motor de IA "traga sua própria chave" (Gemini, Groq, Ollama, Claude, OpenAI) | Publicada (`main`) |
-| 2 | Fontes primárias em 7 áreas, modo cidadão sem chave e app web | Aguardando validação (`feat/fase-2-fontes-primarias`) |
-| 3 | Vídeo, áudio e imagens: transcrição com minutagem, metadados EXIF, detecção de IA (C2PA), Docker | Próxima |
+| 1 | Fundação: API, motor de IA "traga sua própria chave" (Gemini, Groq, Ollama, Claude, OpenAI) | Publicada |
+| 2 | Fontes primárias em 7 áreas, modo cidadão sem chave e app web | Publicada (Alpha 1.2) |
+| 3 | Vídeo, áudio e imagens: transcrição com minutagem, metadados EXIF, detecção de IA (C2PA), Docker | Em desenvolvimento |
 | 4 | Relatórios por público: família, estudante de jornalismo, área jurídica/acadêmica | Planejada |
 | 5 | Testes completos e release Alpha 1.0 | Planejada |
 
@@ -116,7 +116,8 @@ O andamento detalhado de cada fase está no [TASK_BOARD.md](TASK_BOARD.md).
 
 | Tag | Conteúdo |
 | --- | --- |
-| `v0.2.0-rc.1` | Fase 2 (candidata a release): fontes primárias, modo cidadão, app web, clima |
+| `v1.2.0-alpha` | **Alpha 1.2** (Fase 2 validada): fontes primárias em 7 áreas, modo cidadão, app web, clima, diagnóstico de chaves e escolha automática de modelo de IA |
+| `v0.2.0-rc.1` | Candidata a release da Fase 2 (antes da validação) |
 
 ---
 
@@ -128,5 +129,5 @@ O andamento detalhado de cada fase está no [TASK_BOARD.md](TASK_BOARD.md).
 
 ```powershell
 cd backend
-.venv\Scripts\python -m pytest -q      # 216 testes, nenhum acessa a internet
+.venv\Scripts\python -m pytest -q      # 223 testes, nenhum acessa a internet
 ```

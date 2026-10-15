@@ -1,4 +1,4 @@
-# Veritas Engine — Backend (Alpha 1.0 · Fase 2)
+# Veritas Engine — Backend (Alpha 1.2)
 
 API FastAPI de fact-checking em **fontes primárias** (governos do Brasil e da França, leis e
 jurisprudência, ciência e saúde, clima, geopolítica e memória da web), com IA opcional via **BYOK**,
@@ -101,7 +101,7 @@ cd backend
 .venv/Scripts/ruff check . && .venv/Scripts/ruff format --check .
 ```
 
-216 testes; nenhum faz chamadas de rede reais (SDKs e APIs públicas são mockados).
+223 testes; nenhum faz chamadas de rede reais (SDKs e APIs públicas são mockados).
 
 ## Configuração (`.env`)
 
@@ -141,7 +141,13 @@ curl -X POST http://127.0.0.1:8000/api/v1/fact-check/text \
 
 Respostas de modelos abertos (Llama/Groq etc.) são validadas de forma tolerante: ids de evidência
 numéricos viram `E1`, `"85%"` vira `0.85`, `"true"` vira `VERDADEIRO`, listas longas são cortadas.
-Falhas da IA são registradas no log do servidor (sem a chave) e devolvidas em `notes`.
+Falhas da IA são registradas no log do servidor (sem a chave) e devolvidas em `notes`, com o
+motivo dado pelo provedor (trechos parecidos com chaves são ocultados).
+
+**Modelo indisponível:** se o modelo padrão não estiver liberado para a chave do usuário (HTTP 404,
+comum nos planos gratuitos), o provedor lista os modelos da chave e escolhe o melhor modelo de
+conversa (Groq, Gemini e servidores compatíveis com OpenAI). `POST /api/v1/byok/test` informa o
+modelo escolhido e o app passa a enviá-lo em `X-Model`.
 
 ## Estrutura
 

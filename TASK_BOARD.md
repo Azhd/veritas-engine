@@ -40,7 +40,7 @@
 | Fase | Descrição | Status Atual | Responsável |
 | :--- | :--- | :--- | :--- |
 | **Fase 1** | **Fundação & Core:** Estrutura FastAPI, Router BYOK multi-provedor (Gemini, Claude, OpenAI, Groq, Ollama) | `PUBLICADA NO GITHUB` | Claude Code |
-| **Fase 2** | **Conectores de Fontes Primárias & App do Cidadão:** Módulos multidisciplinares assíncronos (`br_gov`, `fr_gov`, `science_health`, `legal_justice`, `global_geopolitics`, `climate_environment`, `web_archive`) + Modo Custo Zero + App Web (`app/web/`) | `AGUARDANDO VALIDAÇÃO DO USUÁRIO` | Claude Code |
+| **Fase 2** | **Conectores de Fontes Primárias & App do Cidadão:** Módulos multidisciplinares assíncronos (`br_gov`, `fr_gov`, `science_health`, `legal_justice`, `global_geopolitics`, `climate_environment`, `web_archive`) + Modo Custo Zero + App Web (`app/web/`) | `PUBLICADA NO GITHUB` (Alpha 1.2, `v1.2.0-alpha`) | Claude Code |
 | **Fase 3** | **Pipeline Multimodal & Forense Digital:** Extração de mídia (`yt-dlp` + FFmpeg), transcrição temporal (Whisper), validação C2PA/EXIF e Dockerização | `EM PROGRESSO` | Claude Code |
 | **Fase 4** | **Motor de Contexto e Adaptação de Audiência:** `verdict_engine.py` com relatórios em três modos (`general_family`, `journalism_student`, `law_academic`) | `BACKLOG` | Claude Code |
 | **Fase 5** | **Testes Alfa e Consolidação de Release:** Suíte completa de testes E2E, documentação e empacotamento da release Alpha 1.0 | `BACKLOG` | Claude Code |
@@ -49,7 +49,7 @@
 
 ## 🎯 FASE 2: Conectores de Fontes Primárias Multidisciplinares
 
-**Status da Fase**: `AGUARDANDO VALIDAÇÃO DO USUÁRIO`  
+**Status da Fase**: `PUBLICADA NO GITHUB` (Alpha 1.2, tag `v1.2.0-alpha`, mesclada em `main`)  
 **Responsável**: Claude Code (Engenheiro Executor)  
 **Meta**: Expandir o Veritas Engine para além do factual político básico, dotando o sistema de conectores assíncronos e resilientes para checagem em Saúde/Ciência, Geopolítica Global, Direito/Justiça, Clima/Ambiente, Governos (BR/FR), Histórico da Web e App do Cidadão acessível a custo zero.
 
@@ -302,8 +302,9 @@
 ### 4. Validação do Usuário & Publicação Remota (Fase 2)
 *(Preenchido após o gatilho de aprovação do usuário)*
 
-- **Status de Publicação**: `PUBLICADA NO GITHUB` na branch `feat/fase-2-fontes-primarias` (push pedido explicitamente pelo usuário no chat em 2026-10-15). **Ainda não mesclada em `main`**: o merge em `main` aguarda a validação final do usuário.
+- **Status de Publicação**: `PUBLICADA NO GITHUB` como **Alpha 1.2**: branch `feat/fase-2-fontes-primarias` mesclada em `main` (merge commit) e tag `v1.2.0-alpha`, a pedido explícito do usuário no chat em 2026-10-15, após validar localmente o app e o conector Groq ("conector groq funcional! quero que faça o push correto da versão alpha 1.2").
 - **Instruções de Teste Apresentadas**: `cd backend` → `.\run.ps1` → abrir `http://127.0.0.1:8000` (app do cidadão) ou `/docs` (API). Passo a passo e solução de problemas no `backend/README.md`.
-- **Aprovação do Usuário**: [x] SIM (push da branch) | [ ] NÃO
-- **Commit Hash**: `f386efe` (com `5a5106c`), tag `v0.2.0-rc.1`
-- **Branch / Repositório Remoto**: https://github.com/Azhd/veritas-engine/tree/feat/fase-2-fontes-primarias · `main` permanece em `a3f9ae0` (Fase 1).
+- **Aprovação do Usuário**: [x] SIM (validação local + pedido de publicação da Alpha 1.2) | [ ] NÃO
+- **Commit Hash**: merge da Fase 2 em `main` (tag `v1.2.0-alpha`); commits da fase: `5a5106c`, `f386efe`, `2e23b89`, `1182a8f`, `6e74b67`. Tag anterior de candidata: `v0.2.0-rc.1`.
+- **Correções feitas durante a validação do usuário**: diagnóstico de chaves recusadas (motivo do provedor, chaves mascaradas/incompletas, caracteres invisíveis), Gemini 400 "API key not valid" tratado como erro de chave, e escolha automática de modelo quando o padrão não está liberado para a conta (Groq respondia `model_not_found` para `llama-3.3-70b-versatile`). 223 testes passando.
+- **Branch / Repositório Remoto**: `main` → https://github.com/Azhd/veritas-engine (Alpha 1.2) · branch da fase preservada: `feat/fase-2-fontes-primarias`.
