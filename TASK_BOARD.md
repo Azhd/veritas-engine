@@ -189,6 +189,7 @@
   - Teste de transcrição e segmentação temporal.
   - Teste da rota `POST /api/v1/fact-check/media`.
 - [ ] Garantir 100% de aprovação na suíte de testes (`pytest backend/tests -v`).
+- [ ] Atualizar a documentação (pedido do usuário, vale para todas as fases): `README.md` da raiz (como iniciar, o que o app faz, tabela de fases e versões) e `backend/README.md` (rotas, fontes, configuração, estrutura).
 - [ ] Atualizar status para `PRONTO PARA REVISÃO DO ANTIGRAVITY`.
 
 ---
