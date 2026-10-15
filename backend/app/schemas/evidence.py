@@ -51,6 +51,7 @@ class EvidenceQuery(BaseModel):
         default_factory=list, description="Explicit legal citations, e.g. 'Lei 12.965/2014'."
     )
     urls: list[str] = Field(default_factory=list, description="URLs to audit in web archives.")
+    language: str = Field(default="pt", description="ISO 639-1 language of the claim.")
     max_results: int = Field(default=5, ge=1, le=50)
 
     @property

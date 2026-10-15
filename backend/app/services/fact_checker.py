@@ -221,6 +221,7 @@ class FactCheckService:
             countries=sorted(c.value for c in analysis.country.countries()),
             legal_references=analysis.legal_references,
             urls=analysis.urls,
+            language=analysis.language,
             max_results=self.max_results_per_connector,
         )
         results = await asyncio.gather(

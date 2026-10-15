@@ -117,7 +117,7 @@
     "cert_medium_false": "Probably false ({pct}% confidence).",
     "cert_medium_warn": "Probably misleading ({pct}% confidence).",
     "cert_weak": "Low confidence ({pct}%): read the sources before drawing a conclusion.",
-    "cert_neutral": "The sources don't settle it either way ({pct}% confidence).",
+    "cert_neutral": "Neither true nor false: the sources found don't settle it. There is no truth percentage in this case.",
     "level_strong": "high confidence",
     "level_medium": "medium confidence",
     "level_weak": "low confidence",
@@ -150,6 +150,7 @@
     "v_inconclusive_meaning": "The sources found don't allow a safe conclusion.",
     "v_no_data": "Not enough data",
     "v_no_data_meaning": "We found no official data on this subject.",
+    "v_no_data_meaning_sources": "The official sources found don't directly address this claim.",
     "v_raw": "See the official sources",
     "v_raw_meaning": "We gathered what the official sources say. Read them and draw your own conclusion.",
 
