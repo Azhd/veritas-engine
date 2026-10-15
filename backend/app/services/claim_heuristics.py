@@ -151,7 +151,8 @@ _DOMAIN_TRIGGERS: dict[Domain, tuple[str, ...]] = {
         "niveau de la mer", "desmatamento", "deforestation", "emissoes", "emissions",
         "acordo de paris", "accord de paris", "ipcc", "giec", "seca", "secheresse",
         "warming", "heatwave", "heat wave", "drought", "sea level", "carbon", "greenhouse",
-        "wildfire",
+        "wildfire", "plus chaud", "chaleur", "planete", "mais quente", "calor", "hottest",
+        "warmest",
     ),
     Domain.POLITICS_LEGISLATION: (
         "deputad", "senador", "senat", "projeto de lei", "votac", "vote", "congresso",
@@ -206,6 +207,7 @@ GLOSSARY_EN: dict[str, str] = {
     "detruite": "destroyed", "escombros": "rubble", "decombres": "rubble",
     "terremoto": "earthquake", "seisme": "earthquake", "enchente": "flood",
     "inondation": "flood", "incendio": "wildfire", "furacao": "hurricane",
+    "paracetamol": "acetaminophen", "grossesse": "pregnancy", "gravidez": "pregnancy",
     "refem": "hostage", "refens": "hostages", "otage": "hostage", "mortos": "killed",
     "vitimas": "casualties", "victimes": "casualties", "hospital": "hospital",
     "venezuela": "venezuela", "china": "china", "chine": "china", "ira": "iran",
