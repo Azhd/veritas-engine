@@ -8,6 +8,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import anthropic
+import groq
 import httpx
 import openai
 import pytest
@@ -371,3 +372,93 @@ class TestOllamaAdapter:
             )
         )
         assert provider._client.headers["Authorization"] == "Bearer tok"
+
+
+# =============================================================== model fallback (catalog changes)
+class TestModelFallback:
+    def test_pick_model_prefers_known_good_and_skips_non_chat(self):
+        from app.engines.base import pick_model
+        from app.engines.providers.groq_provider import GroqProvider
+
+        available = [
+            "whisper-large-v3",
+            "meta-llama/llama-guard-4-12b",
+            "llama-3.1-8b-instant",
+            "openai/gpt-oss-120b",
+            "playai-tts",
+        ]
+        chosen = pick_model(
+            available,
+            GroqProvider.preferred_models,
+            GroqProvider.non_chat_markers,
+            "llama-3.3-70b-versatile",
+        )
+        assert chosen == "openai/gpt-oss-120b"
+
+    def test_pick_model_falls_back_to_largest_unknown_model(self):
+        from app.engines.base import pick_model
+
+        chosen = pick_model(["acme/tiny-8b", "acme/big-70b", "acme-guard-12b"], (), ("guard",), "x")
+        assert chosen == "acme/big-70b"
+        assert pick_model(["whisper"], (), ("whisper",), "x") is None
+
+    async def test_groq_switches_model_after_404_and_reports_it(self):
+        not_found = _status_error(groq, "NotFoundError", 404)
+        client = _openai_client("resposta")
+        client.chat.completions.create.side_effect = [not_found, _chat_completion("resposta")]
+        client.models.list = AsyncMock(
+            return_value=SimpleNamespace(
+                data=[
+                    SimpleNamespace(id="whisper-large-v3"),
+                    SimpleNamespace(id="openai/gpt-oss-120b"),
+                ]
+            )
+        )
+        provider = GroqProvider(
+            fake_credentials(provider=ProviderName.GROQ, model="llama-3.3-70b-versatile"),
+            client=client,
+        )
+        assert await provider.generate_text("oi") == "resposta"
+        calls = client.chat.completions.create.await_args_list
+        assert [c.kwargs["model"] for c in calls] == [
+            "llama-3.3-70b-versatile",
+            "openai/gpt-oss-120b",
+        ]
+        assert provider.model == "openai/gpt-oss-120b"
+
+    async def test_fallback_is_tried_only_once(self):
+        not_found = _status_error(groq, "NotFoundError", 404)
+        client = _openai_client()
+        client.chat.completions.create.side_effect = not_found
+        client.models.list = AsyncMock(
+            return_value=SimpleNamespace(data=[SimpleNamespace(id="openai/gpt-oss-20b")])
+        )
+        provider = GroqProvider(fake_credentials(provider=ProviderName.GROQ), client=client)
+        with pytest.raises(ProviderConfigurationError, match="not found"):
+            await provider.generate_text("oi")
+        assert client.chat.completions.create.await_count == 2
+        assert client.models.list.await_count == 1
+
+    async def test_gemini_switches_model_after_404(self):
+        client = MagicMock()
+        client.aio.models.generate_content = AsyncMock(
+            side_effect=[
+                genai_errors.ClientError(404, {"error": {"message": "model not found"}}),
+                SimpleNamespace(text="ok"),
+            ]
+        )
+
+        async def _pager():
+            for name, actions in (
+                ("models/text-embedding-004", ["embedContent"]),
+                ("models/gemini-2.5-flash", ["generateContent"]),
+            ):
+                yield SimpleNamespace(name=name, supported_actions=actions)
+
+        client.aio.models.list = AsyncMock(return_value=_pager())
+        provider = GeminiProvider(
+            fake_credentials(provider=ProviderName.GEMINI, model="gemini-flash-latest"),
+            client=client,
+        )
+        assert await provider.generate_text("oi") == "ok"
+        assert provider.model == "gemini-2.5-flash"

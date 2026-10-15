@@ -45,9 +45,23 @@ class OpenAICompatibleProvider(BaseLLMProvider):
             kwargs["response_format"] = response_format
         try:
             response = await self._client.chat.completions.create(**kwargs)
+        except self.sdk.NotFoundError as exc:
+            # The model is unknown to this key (retired / not enabled): pick an available one.
+            if await self.switch_to_available_model():
+                return await self._chat(prompt, system_instruction, temperature, response_format)
+            raise map_openai_style_error(exc, self.sdk, self.name.value) from None
         except self.sdk.APIError as exc:
             raise map_openai_style_error(exc, self.sdk, self.name.value) from None
         return response.choices[0].message.content or ""
+
+    async def list_models(self) -> list[str]:
+        result = self._client.models.list()
+        if hasattr(result, "__await__"):
+            result = await result
+        items = getattr(result, "data", None)
+        if items is None:  # AsyncPaginator (openai SDK)
+            items = [item async for item in result]
+        return [str(getattr(item, "id", item)) for item in items]
 
     async def generate_text(
         self,
@@ -81,6 +95,7 @@ class OpenAIProvider(OpenAICompatibleProvider):
     name = ProviderName.OPENAI
     sdk = openai
     supports_custom_endpoint = True
+    preferred_models = ("gpt-4o", "gpt-4.1", "gpt-4o-mini", "gpt-4.1-mini")
 
     def _build_client(self) -> Any:
         return openai.AsyncOpenAI(

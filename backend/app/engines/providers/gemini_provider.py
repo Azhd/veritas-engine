@@ -16,6 +16,14 @@ from app.engines.providers._errors import map_status_code
 
 class GeminiProvider(BaseLLMProvider):
     name = ProviderName.GEMINI
+    preferred_models = (
+        "gemini-flash-latest",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-flash-lite-latest",
+        "gemini-2.5-flash-lite",
+    )
+    non_chat_markers = (*BaseLLMProvider.non_chat_markers, "pro", "exp", "preview", "gemma")
 
     def __init__(self, credentials: ProviderCredentials, client: Any | None = None) -> None:
         super().__init__(credentials)
@@ -30,6 +38,8 @@ class GeminiProvider(BaseLLMProvider):
                 model=self.model, contents=prompt, config=config
             )
         except genai_errors.APIError as exc:
+            if getattr(exc, "code", None) == 404 and await self.switch_to_available_model():
+                return await self._generate(prompt, config)
             body = getattr(exc, "details", None)
             if not isinstance(body, dict):
                 body = {"error": {"message": getattr(exc, "message", None), "code": exc.status}}
@@ -68,6 +78,15 @@ class GeminiProvider(BaseLLMProvider):
             response_json_schema=json_schema,
         )
         return await self._generate(prompt, config)
+
+    async def list_models(self) -> list[str]:
+        names: list[str] = []
+        async for model in await self._client.aio.models.list():
+            actions = getattr(model, "supported_actions", None) or []
+            if actions and "generateContent" not in actions:
+                continue
+            names.append(str(model.name).removeprefix("models/"))
+        return names
 
     async def aclose(self) -> None:
         await self._client.aio.aclose()

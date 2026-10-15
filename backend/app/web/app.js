@@ -260,6 +260,7 @@ function setAiStatus() {
 function aiHeaders(ai) {
   const headers = { "X-Provider": ai.provider };
   if (ai.key) headers["X-API-Key"] = ai.key;
+  if (ai.model) headers["X-Model"] = ai.model;
   return headers;
 }
 
@@ -354,7 +355,9 @@ async function useAi() {
       showAiStatus(false, `Não funcionou. ${friendlyAiError(result.message, candidate.provider)}`);
       return;
     }
-    state.ai = candidate;
+    // Reuse the model that answered (it may differ from the default when the provider's
+    // free catalog changed), so later checks skip the model discovery.
+    state.ai = { ...candidate, model: result.model };
     setAiStatus();
     remember();
     showAiStatus(true, `Conectado: ${PROVIDER_NAMES[result.provider] || result.provider} (${result.model}). Agora clique em “Verificar agora”.`);

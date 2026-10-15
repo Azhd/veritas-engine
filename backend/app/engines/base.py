@@ -8,6 +8,8 @@ one user can never leak into another user's request.
 from __future__ import annotations
 
 import json
+import logging
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import ClassVar, TypeVar
@@ -19,6 +21,7 @@ from app.core.errors import ProviderOutputError
 from app.engines.json_utils import extract_json
 
 T = TypeVar("T", bound=BaseModel)
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,12 +49,49 @@ class BaseLLMProvider(ABC):
     #: How many times ``generate_structured`` re-asks the model after an invalid JSON answer.
     structured_retries: ClassVar[int] = 1
 
+    #: Models tried first when the configured one is unavailable for the user's key (best first).
+    preferred_models: ClassVar[tuple[str, ...]] = ()
+    #: Substrings of model ids that are not chat models (speech, safety, embeddings...).
+    non_chat_markers: ClassVar[tuple[str, ...]] = (
+        "whisper", "guard", "tts", "embed", "audio", "orpheus", "playai", "image", "vision-only",
+        "compound", "moderation", "transcribe", "realtime", "search",
+    )  # fmt: skip
+
     def __init__(self, credentials: ProviderCredentials) -> None:
         self.credentials = credentials
+        self._model_override: str | None = None
+        self._model_fallback_tried = False
 
     @property
     def model(self) -> str:
-        return self.credentials.model
+        return self._model_override or self.credentials.model
+
+    async def list_models(self) -> list[str]:
+        """Model ids available to this key; providers that cannot list return an empty list."""
+        return []
+
+    async def switch_to_available_model(self) -> bool:
+        """Called once when the provider says the model does not exist for this key.
+
+        Free tiers change their model catalog often (models are retired or not enabled for every
+        account), so instead of failing we ask the provider which models the key can use and
+        pick the best chat model. Returns True when a different model was selected.
+        """
+        if self._model_fallback_tried:
+            return False
+        self._model_fallback_tried = True
+        try:
+            available = await self.list_models()
+        except Exception:  # listing is best-effort; the original error is reported instead
+            return False
+        choice = pick_model(available, self.preferred_models, self.non_chat_markers, self.model)
+        if choice is None:
+            return False
+        logger.warning(
+            "%s: model %r unavailable for this key, using %r instead", self.name, self.model, choice
+        )
+        self._model_override = choice
+        return True
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(model={self.model!r})"
@@ -127,3 +167,27 @@ def json_system_instruction(system_instruction: str | None, json_schema: dict) -
 def _short(exc: Exception | None, limit: int = 300) -> str:
     text = str(exc) if exc else "unknown error"
     return text if len(text) <= limit else text[:limit] + "..."
+
+
+def pick_model(
+    available: list[str],
+    preferred: tuple[str, ...],
+    non_chat_markers: tuple[str, ...],
+    current: str,
+) -> str | None:
+    """Best chat model among ``available`` (ids as the provider lists them)."""
+    candidates = [
+        m for m in available if m != current and not any(x in m.lower() for x in non_chat_markers)
+    ]
+    if not candidates:
+        return None
+    for wanted in preferred:
+        if wanted in candidates:
+            return wanted
+
+    # Otherwise prefer the largest model advertised in the id ("120b" > "70b" > "8b").
+    def size(model_id: str) -> float:
+        match = re.search(r"(\d+(?:\.\d+)?)b\b", model_id.lower())
+        return float(match.group(1)) if match else 0.0
+
+    return max(candidates, key=lambda m: (size(m), m))
