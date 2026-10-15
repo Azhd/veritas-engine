@@ -51,11 +51,12 @@ const ICONS = {
   video: "M4 6h11a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zm12 4 5-3v10l-5-3",
   mic: "M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3",
   translate: "M4 5h9M8.5 3v2m3 0c-.8 4-3.6 7.3-7 9m2-6c1.2 2.4 3.3 4.5 6 5.5M13 21l4.5-10L22 21m-7.5-3h6",
+  factcheck: "M9 12.5 11 14.5 15.5 10M12 3l2.2 1.6 2.7-.1.8 2.6 2.2 1.6-.9 2.5.9 2.5-2.2 1.6-.8 2.6-2.7-.1L12 21l-2.2-1.6-2.7.1-.8-2.6-2.2-1.6.9-2.5-.9-2.5 2.2-1.6.8-2.6 2.7.1z",
 };
 
 const AREA_COLORS = {
   gov: "--a-gov", stats: "--a-stats", law: "--a-law", science: "--a-science",
-  world: "--a-world", climate: "--a-climate", web: "--a-web",
+  world: "--a-world", climate: "--a-climate", web: "--a-web", factcheck: "--a-fact",
 };
 const areaLabel = (area) => t(`area_${area}`);
 
@@ -67,8 +68,12 @@ const CONNECTORS = {
   "fr.judilibre": ["law", "fr"], "eu.eurlex": ["law", "en"], "science.pubmed": ["science", "en"],
   "health.who_gho": ["science", "en"], "geo.gdelt": ["world", "en"], "geo.reliefweb": ["world", "en"],
   "web.wayback": ["web", null], "climate.copernicus": ["climate", "pt"],
-  "climate.noaa": ["climate", "pt"],
+  "climate.noaa": ["climate", "pt"], "kb.wikidata": ["gov", null],
+  "intl.worldbank": ["stats", null], "eu.eurostat": ["stats", null],
+  "science.crossref": ["science", "en"], "factcheck.google": ["factcheck", null],
 };
+//: Public knowledge bases (collaborative, not official): flagged on every source card.
+const UNOFFICIAL = new Set(["kb.wikidata"]);
 
 const VERDICTS = {
   VERDADEIRO: { key: "v_true", tone: "true", icon: "check", emoji: "✅" },
@@ -126,6 +131,34 @@ function certainty(report) {
   const level = confidence >= STRONG_CONFIDENCE ? "strong" : confidence >= MEDIUM_CONFIDENCE ? "medium" : "weak";
   const text = level === "weak" ? t("cert_weak", { pct }) : t(`cert_${level}_${tone}`, { pct });
   return { pct, tone, level, text, position: 50 + lean * confidence * 50, strong: level === "strong" };
+}
+
+// ---------------------------------------------------------------- audiences (Phase 4)
+const AUDIENCES = ["general_family", "journalism_student", "law_academic"];
+
+function currentAudience() {
+  const value = document.querySelector('input[name="audience"]:checked')?.value;
+  return AUDIENCES.includes(value) ? value : "general_family";
+}
+
+function restoreAudience() {
+  try {
+    const saved = localStorage.getItem("veritas.audience");
+    const radio = AUDIENCES.includes(saved) && document.querySelector(`input[name="audience"][value="${saved}"]`);
+    if (radio) radio.checked = true;
+  } catch {
+    // storage blocked: the default audience is used
+  }
+}
+
+function onAudienceChange() {
+  try {
+    localStorage.setItem("veritas.audience", currentAudience());
+  } catch {
+    // storage blocked: the choice simply isn't remembered
+  }
+  // Sources, verdict and confidence never change with the reader: re-render, no new request.
+  if (state.report && !state.media) renderAudience(state.report);
 }
 
 // ---------------------------------------------------------------- state & helpers
@@ -611,6 +644,7 @@ async function submit(event) {
     if (claim) form.append("claim", claim);
     if (country) form.append("country", country);
     form.append("language", LANG);
+    form.append("audience_mode", currentAudience());
     state.lastRequest = () => runMedia(form);
     await runMedia(form);
     return;
@@ -621,7 +655,7 @@ async function submit(event) {
     $("claim").focus();
     return;
   }
-  const body = { claim, language: LANG };
+  const body = { claim, language: LANG, audience_mode: currentAudience() };
   if (country) body.country = country;
   if (link) body.source_url = link;
   state.lastRequest = () => run(body);
@@ -741,20 +775,26 @@ function renderReport(report) {
   $("forensicsBox").hidden = true;
   $("timelineBox").hidden = true;
   $("sourcesBox").hidden = false;
-  const head = verdictInfo(report.verdict);
-  if (report.verdict === "SEM_DADOS_SUFICIENTES" && report.primary_sources?.length) {
-    head.meaning = t("v_no_data_meaning_sources"); // sources were found, they just don't answer
-  }
-  renderVerdictCard(head, certainty(report));
+  renderVerdictCard(verdictHead(report), certainty(report));
   renderAlerts(report);
   $("claimQuote").textContent = `“${report.claim}”`;
   renderExplanation(report.explanation || "");
+  renderAudience(report);
   // The free-AI invitation only makes sense when no AI was configured at all.
   $("ctaAi").hidden = report.ai_used || Boolean(state.ai);
   renderSources();
   renderNotes(report);
   showState("result");
   $("resultState").scrollTop = 0;
+}
+
+/** Verdict label and meaning for a report (also used by the share card). */
+function verdictHead(report) {
+  const head = verdictInfo(report.verdict);
+  if (report.verdict === "SEM_DADOS_SUFICIENTES" && report.primary_sources?.length) {
+    head.meaning = t("v_no_data_meaning_sources"); // sources were found, they just don't answer
+  }
+  return head;
 }
 
 function renderExplanation(text) {
@@ -784,6 +824,12 @@ function focusSource(evidenceId) {
   void item.offsetWidth;
   item.classList.add("flash");
   setTimeout(() => item.classList.remove("flash"), 1800);
+}
+
+/** The server prefixes retracted articles ("Artigo retratado: ..."); the red badge says it. */
+function localizeTitle(title) {
+  const prefix = "Artigo retratado: ";
+  return title.startsWith(prefix) ? title.slice(prefix.length) : title;
 }
 
 function sourceArea(source) {
@@ -842,8 +888,10 @@ function sourceCard(source, index) {
       el("span", { class: "source-id", text: source.evidence_id }),
       el("span", { class: "source-area", text: areaLabel(area) }),
       foreign ? el("span", { class: "lang-tag", text: lang.toUpperCase() }) : null,
-      source.cited ? el("span", { class: "cited", text: t("cited") }) : null),
-    el("h4", { text: source.title }),
+      source.cited ? el("span", { class: "cited", text: t("cited") }) : null,
+      UNOFFICIAL.has(source.connector) ? el("span", { class: "unofficial", title: t("unofficial_hint"), text: t("unofficial") }) : null,
+      source.connector === "science.crossref" ? el("span", { class: "level retracted", text: t("level_retracted") }) : null),
+    el("h4", { text: localizeTitle(source.title) }),
     el("p", { class: "publisher", text: source.publisher }),
     excerpt,
     longExcerpt ? el("button", {
@@ -868,6 +916,159 @@ function sourceCard(source, index) {
     class: "source", "data-evidence": source.evidence_id,
     style: `--c: var(${AREA_COLORS[area]}); --i: ${index}`,
   }, areaIcon(area), body);
+}
+
+// ---------------------------------------------------------------- audience sections
+/** Sections for the chosen reader, all built from the report's own data (no extra request). */
+function renderAudience(report) {
+  const box = $("audienceBox");
+  box.replaceChildren();
+  const audience = report.audience;
+  const mode = currentAudience();
+  if (!audience) {
+    box.hidden = true;
+    return;
+  }
+  // The explanation was written for the audience chosen at check time: offer to rewrite it.
+  if (report.ai_used && audience.mode !== mode) {
+    box.append(el("div", { class: "rewrite" },
+      el("span", { text: t("rewrite_hint") }),
+      el("button", { type: "button", class: "link-btn", text: t("rewrite_button"), onclick: () => submit() })));
+  }
+  if (mode === "general_family") box.append(...familySections(report, audience));
+  else if (mode === "journalism_student") box.append(...journalismSections(report, audience));
+  else box.append(...lawSections(report, audience));
+  box.hidden = box.childElementCount === 0;
+}
+
+function audienceBlock(title, ...content) {
+  return el("div", { class: "aud-block" }, el("h4", { text: title }), ...content);
+}
+
+function familySections(report, audience) {
+  const points = audience.key_points || [];
+  if (!points.length) return [];
+  const tone = VERDICTS[report.verdict]?.tone;
+  const title = { true: t("one_minute_true"), false: t("one_minute_false"), warn: t("one_minute_warn") }[tone] || t("one_minute_other");
+  return [el("div", { class: `one-minute tone-${tone || "neutral"}` },
+    el("h4", { text: title }),
+    el("ul", { class: "key-points" }, points.map((p) => el("li", { text: stripRefs(p) }))))];
+}
+
+function journalismSections(report, audience) {
+  const nodes = [];
+  if (audience.key_points?.length) {
+    nodes.push(el("ul", { class: "key-points" }, audience.key_points.map((p) => el("li", {}, refText(p)))));
+  }
+  // method: what was searched, where, what came back
+  const failed = new Set((report.connector_failures || []).map((f) => f.connector));
+  const sources = report.primary_sources || [];
+  const method = el("ol", { class: "method" },
+    audience.search_terms?.length
+      ? el("li", {}, el("b", { text: t("method_terms") + (LANG === "fr" ? " : " : ": ") }),
+        audience.search_terms.map((term) => el("code", { class: "term", text: term })))
+      : null,
+    el("li", {}, el("b", { text: t("method_sources", { count: (report.connectors_queried || []).length }) }), " ",
+      (report.connectors_queried || []).map((id) => el("span", { class: `term${failed.has(id) ? " failed" : ""}`, text: failed.has(id) ? `${id} (${t("method_failed")})` : id }))),
+    el("li", { text: t("method_evidence", { count: sources.length, cited: sources.filter((s) => s.cited).length }) }),
+    el("li", { text: report.ai_used ? t("method_ai", { model: `${providerName(report.provider)} · ${report.model}` }) : t("method_no_ai") }));
+  nodes.push(audienceBlock(t("method_title"), method));
+  if (audience.contradictions?.length) {
+    nodes.push(audienceBlock(t("contradictions_title"),
+      el("ul", { class: "contradictions" }, audience.contradictions.map((c) => el("li", {}, refText(c))))));
+  }
+  if (audience.timeline?.length) {
+    nodes.push(audienceBlock(t("aud_timeline_title"), el("ol", { class: "aud-timeline" },
+      audience.timeline.map((event) => el("li", { "data-kind": event.kind },
+        el("time", { datetime: event.day, text: formatDate(event.day) || event.day }),
+        el("span", { class: "tl-kind", text: t(`tl_${event.kind}`) }),
+        el("button", { type: "button", class: "ref", text: event.evidence_id, onclick: () => focusSource(event.evidence_id) }),
+        el("span", { class: "tl-title", text: event.title }))))));
+  }
+  for (const page of audience.archive || []) {
+    const facts = [t("archive_counts", { captures: page.captures_inspected, versions: page.distinct_versions })];
+    if (page.removed_or_redirected) facts.push(t("archive_removed"));
+    if (page.title_changed && page.first_title && page.last_title) facts.push(t("archive_title_changed", { first: page.first_title, last: page.last_title }));
+    if (page.content_changed) facts.push(t("archive_changed"));
+    if (!page.content_changed && !page.removed_or_redirected) facts.push(t("archive_stable"));
+    nodes.push(audienceBlock(t("archive_title"), el("p", { class: "archive-url", text: page.url }),
+      el("ul", {}, facts.map((f) => el("li", { text: f })))));
+  }
+  nodes.push(audienceBlock(t("redo_title"), el("ol", { class: "redo" },
+    ["redo_1", "redo_2", "redo_3", "redo_4"].map((key) => el("li", { text: t(key) })))));
+  return nodes;
+}
+
+function lawSections(report, audience) {
+  const nodes = [];
+  if (audience.key_points?.length) {
+    nodes.push(audienceBlock(t("basis_title"),
+      el("ul", { class: "key-points" }, audience.key_points.map((p) => el("li", {}, refText(p))))));
+  }
+  if (audience.legal_references?.length) {
+    nodes.push(audienceBlock(t("legal_refs_title"), legalList(audience.legal_references)));
+  }
+  if (audience.contradictions?.length) {
+    nodes.push(audienceBlock(t("contradictions_title"),
+      el("ul", { class: "contradictions" }, audience.contradictions.map((c) => el("li", {}, refText(c))))));
+  }
+  const citations = audience.citations || [];
+  if (citations.length) nodes.push(referencesBlock(citations));
+  return nodes;
+}
+
+function legalList(references) {
+  return el("ul", { class: "legal-refs" }, references.map((ref) => {
+    const link = safeUrl(ref.url);
+    return el("li", {},
+      el("span", { class: "legal-kind", text: t(`legal_kind_${ref.kind}`) }),
+      el("b", { text: ref.value }),
+      ref.cited ? el("span", { class: "cited", text: t("cited") }) : null,
+      link ? el("a", { href: link, target: "_blank", rel: "noopener noreferrer", text: ref.title }) : el("span", { text: ref.title }));
+  }));
+}
+
+function referencesBlock(citations) {
+  let style = "abnt";
+  const list = el("ol", { class: "references" });
+  const draw = () => {
+    list.replaceChildren(...citations.map((c) => el("li", {},
+      el("button", { type: "button", class: "ref", text: c.evidence_id, onclick: () => focusSource(c.evidence_id) }),
+      el("span", { class: "ref-text", text: c[style] }),
+      c.level ? el("span", { class: `level ${c.level}`, text: t(c.level === "retracted" ? "level_retracted" : "level_high") }) : null,
+      el("button", { type: "button", class: "ghost copy-ref", text: t("copy_ref"), onclick: () => copyText(c[style]) }))));
+  };
+  const switcher = el("div", { class: "ref-style", role: "group" },
+    ["abnt", "apa"].map((key) => el("button", {
+      type: "button", "aria-pressed": String(key === style), text: key.toUpperCase(),
+      onclick: (event) => {
+        style = key;
+        switcher.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === event.currentTarget)));
+        draw();
+      },
+    })),
+    el("button", { type: "button", class: "ghost", text: t("copy_all_refs"), onclick: () => copyText(citations.map((c) => c[style]).join("\n\n")) }));
+  draw();
+  return audienceBlock(t("refs_title"), switcher, list);
+}
+
+/** Text with clickable [E1] markers. */
+function refText(text) {
+  return String(text || "").split(/(\[E\d+\])/g).filter(Boolean).map((part) => {
+    const match = part.match(/^\[(E\d+)\]$/);
+    return match
+      ? el("button", { type: "button", class: "ref", text: match[1], onclick: () => focusSource(match[1]) })
+      : part;
+  });
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(t("ref_copied"));
+  } catch {
+    toast(t("copy_fail"));
+  }
 }
 
 // ---------------------------------------------------------------- media report
@@ -921,6 +1122,7 @@ function renderMediaReport(data) {
   const transcriptTip = (data.notes || []).some((n) => TRANSCRIPT_PREFIXES.some((p) => n.startsWith(p)));
   $("ctaAi").hidden = data.ai_used || Boolean(state.ai) || transcriptTip;
 
+  $("audienceBox").hidden = true; // each claim of the media has its own sections below
   renderForensics(f);
   renderTimeline(data.checks || []);
   $("sourcesBox").hidden = true;
@@ -1058,6 +1260,10 @@ function timelineDetail(report) {
   const cert = certainty(report);
   if (cert) nodes.push(el("p", { class: `tl-certainty tone-${cert.tone || "neutral"}`, text: cert.text }));
   nodes.push(el("p", { class: "tl-explanation", text: stripRefs(report.explanation) }));
+  const points = report.audience?.key_points || [];
+  if (points.length) nodes.push(el("ul", { class: "key-points" }, points.map((p) => el("li", { text: stripRefs(p) }))));
+  const laws = report.audience?.legal_references || [];
+  if (laws.length) nodes.push(legalList(laws.slice(0, 3)));
   const sources = (report.primary_sources || []).slice(0, 3);
   if (sources.length) {
     nodes.push(el("ol", { class: "source-list" }, sources.map((s, i) => sourceCard(s, i))));
@@ -1143,6 +1349,7 @@ const NOTE_RULES = [
   [/^ffmpeg: duração/, "missing_ffmpeg"],
   [/^c2pa: detecção/, "missing_c2pa"],
   [/^Nenhuma chave de IA informada/, "note_no_key"],
+  [/^Veredito apoiado só em base pública não oficial/, "note_unofficial_cap"],
   // errors of the media route (shown on the error screen)
   [/^Envie um arquivo ou cole o link/, "err_need_media"],
   [/^Esse link aponta para uma rede interna/, "err_internal_link"],
@@ -1247,7 +1454,9 @@ function shareText() {
     `${verdict.emoji} *${verdict.label}*${confidenceSuffix(report)}`,
     `“${report.claim.slice(0, 280)}”`,
     "",
-    report.ai_used ? stripRefs(report.explanation).slice(0, 600) : verdict.meaning,
+    report.audience?.key_points?.length && report.audience.mode === "general_family"
+      ? report.audience.key_points.map((p) => `• ${stripRefs(p)}`).join("\n")
+      : report.ai_used ? stripRefs(report.explanation).slice(0, 600) : verdict.meaning,
     "",
     t("share_sources"),
   ];
@@ -1275,8 +1484,9 @@ async function copySummary() {
 // Draws a 1080x1350 share card (portrait, ideal for WhatsApp/Instagram) with the verdict.
 function drawShareCard() {
   const report = state.report;
-  const verdict = verdictInfo(report.verdict);
+  const verdict = verdictHead(report);
   const cert = certainty(report);
+  const sources = (report.primary_sources || []).slice(0, 4);
   const tones = {
     true: ["#12875a", "#e3f6ec"], false: ["#d33a3a", "#fdeaea"], warn: ["#c97800", "#fff3df"],
     neutral: ["#5f6b80", "#eef0f5"], info: ["#3b5bdb", "#e9eeff"],
@@ -1303,7 +1513,10 @@ function drawShareCard() {
 
   // verdict block: solid colour when the AI is near certain, soft tint otherwise
   let y = P + 110;
-  const blockHeight = cert ? 250 : 210;
+  const textWidth = W - 2 * P - 80;
+  ctx.font = font(700, 28);
+  const certLines = cert ? Math.min(3, countLines(ctx, cert.text, textWidth)) : 0;
+  const blockHeight = 210 + certLines * 40;
   ctx.fillStyle = strong ? tone : soft; roundRect(ctx, P, y, W - 2 * P, blockHeight, 32); ctx.fill();
   const ink = strong ? "#ffffff" : tone;
   ctx.fillStyle = ink; ctx.font = font(800, 26);
@@ -1313,7 +1526,7 @@ function drawShareCard() {
   ctx.fillText(fit(ctx, verdict.meaning, W - 2 * P - 80), P + 40, y + 185);
   if (cert) {
     ctx.font = font(700, 28);
-    ctx.fillText(fit(ctx, cert.text, W - 2 * P - 80), P + 40, y + 228);
+    wrap(ctx, cert.text, P + 40, y + 228, textWidth, 38, 3);
   }
   y += blockHeight;
 
@@ -1344,13 +1557,18 @@ function drawShareCard() {
 
   // explanation (AI) or hint
   if (report.ai_used && report.explanation) {
+    // the room left once the sources (if any) and the footer are reserved
+    const reserved = sources.length ? 26 + Math.min(sources.length, 2) * 120 : 0;
+    const maxLines = Math.max(3, Math.floor((H - P - 70 - reserved - y) / 42));
     ctx.fillStyle = "#131a2e"; ctx.font = font(500, 30);
-    y = wrap(ctx, stripRefs(report.explanation), P, y, W - 2 * P, 42, cert ? 4 : 5) + 76;
+    y = wrap(ctx, stripRefs(report.explanation), P, y, W - 2 * P, 42, maxLines) + 76;
   }
 
-  // sources
-  ctx.fillStyle = "#6a7488"; ctx.font = font(800, 24); ctx.fillText(t("card_sources"), P, y); y += 26;
-  for (const source of (report.primary_sources || []).slice(0, 4)) {
+  // sources (no heading when there are none)
+  if (sources.length) {
+    ctx.fillStyle = "#6a7488"; ctx.font = font(800, 24); ctx.fillText(t("card_sources"), P, y); y += 26;
+  }
+  for (const source of sources) {
     if (y > H - 220) break;
     ctx.fillStyle = "#f7f8fc"; roundRect(ctx, P, y, W - 2 * P, 104, 20); ctx.fill();
     ctx.fillStyle = "#131a2e"; ctx.font = font(700, 28);
@@ -1379,6 +1597,21 @@ function fit(ctx, text, maxWidth) {
   let cut = text;
   while (cut.length > 1 && ctx.measureText(`${cut}…`).width > maxWidth) cut = cut.slice(0, -1);
   return `${cut.trimEnd()}…`;
+}
+
+function countLines(ctx, text, maxWidth) {
+  let lines = 1;
+  let line = "";
+  for (const word of text.split(/\s+/)) {
+    const test = line ? `${line} ${word}` : word;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      lines += 1;
+      line = word;
+    } else {
+      line = test;
+    }
+  }
+  return lines;
 }
 
 function wrap(ctx, text, x, y, maxWidth, lineHeight, maxLines) {
@@ -1429,6 +1662,8 @@ async function downloadImage() {
 function init() {
   renderAreas();
   renderExamples();
+  restoreAudience();
+  document.querySelectorAll('input[name="audience"]').forEach((radio) => radio.addEventListener("change", onAudienceChange));
   restoreAi();
   loadProviders();
   setAiStatus();

@@ -25,10 +25,12 @@ _BR_MARKERS = (
     "brasil", "brasileir", "camara dos deputados", "senado federal", "stf", "stj", "ibge", "sus",
     "lula", "bolsonaro", "planalto", "reais", "r$", "sao paulo", "rio de janeiro",
     "congresso nacional", "governo federal", "deputado", "deputada", "ministerio", "anvisa",
+    "bresil", "brazil",
 )  # fmt: skip
 _FR_MARKERS = (
     "france", "francais", "francaise", "assemblee nationale", "senat", "insee", "macron",
-    "elysee", "matignon", "paris", "gouvernement", "depute", "ministere", "loi ",
+    "elysee", "matignon", "paris", "gouvernement", "depute", "ministere", "loi ", "franca",
+    "french",
 )  # fmt: skip
 _PT_WORDS = {
     "nao", "que", "de", "do", "da", "os", "as", "um", "uma", "para", "com", "foi", "sao", "por",
@@ -66,9 +68,14 @@ _STOPWORDS = _PT_WORDS | _FR_WORDS | _EN_STOPWORDS | {
     "viral", "whatsapp", "facebook", "instagram", "tiktok", "youtube", "twitter", "pessoas",
     "gente", "agora", "hoje", "ontem", "semana", "segunda", "terca", "quarta", "quinta",
     "sexta", "sabado", "domingo", "feira", "partir", "vao", "sera", "serao", "ainda",
-    "photos", "images", "reseaux", "sociaux", "montrent", "affirment",
+    "photos", "images", "reseaux", "sociaux", "montrent", "affirment", "chez", "provoquent",
+    "provoque",
     "confirmando", "confirma", "confirmou", "divulgou", "divulga", "relatorio",
     "relatorios", "ultimos", "ultimas", "observatorio", "consecutivos",
+    # legislative verbs and the chambers themselves: every bill title would match them, so they
+    # drown the subject ("reforma tributária") in parliament searches
+    "aprovou", "aprovado", "aprovada", "aprovaram", "aprova", "votou", "votaram", "camara",
+    "deputados", "senado", "federal", "adopte", "adoptee", "approved", "passed",
 }  # fmt: skip
 
 
@@ -93,6 +100,14 @@ def heuristic_country(claim: str) -> CountryContext:
 
 # ---------------------------------------------------------------------- keywords
 _URL_RE = re.compile(r"(?:https?://|www\.)[^\s<>\"']+", re.IGNORECASE)
+
+
+_YEAR_RE = re.compile(r"(?<![\d/.,])(?:19|20)\d{2}(?![\d/.,]\d)")
+
+
+def extract_years(claim: str) -> list[str]:
+    """Years cited in the claim ("adopted in 2019"), not numbers inside laws or amounts."""
+    return list(dict.fromkeys(_YEAR_RE.findall(_URL_RE.sub(" ", claim))))[:4]
 
 
 def extract_urls(claim: str) -> list[str]:
@@ -136,6 +151,7 @@ _DOMAIN_TRIGGERS: dict[Domain, tuple[str, ...]] = {
         "directive", "regulamento europeu", "reglement europeen", "ilegal",
         "illegal", "proibid", "interdit", "medida provisoria",
         " law ", " laws ", "court", "constitution", "statute", "judge", "banned", "ruling",
+        "regulation", "reglement", "regulamento", "directive",
     ),
     Domain.ECONOMY_STATISTICS: (
         "inflac", "inflation", "ipca", "desempreg", "desocupa", "chomage", "pib", "populac",
@@ -143,6 +159,7 @@ _DOMAIN_TRIGGERS: dict[Domain, tuple[str, ...]] = {
         "budget", "divida", "dette", "pobreza", "pauvrete", "renda", "revenu", "economia",
         "economie", "precos", "prix",
         "unemployment", "gdp", " tax", "wage", "salary", "poverty", "debt", "price",
+        "habitant", "inhabitant",
     ),
     Domain.CLIMATE_ENVIRONMENT: (
         "clima", "climat", "aquecimento", "rechauffement", "temperatura", "temperature",
@@ -208,6 +225,8 @@ GLOSSARY_EN: dict[str, str] = {
     "terremoto": "earthquake", "seisme": "earthquake", "enchente": "flood",
     "inondation": "flood", "incendio": "wildfire", "furacao": "hurricane",
     "paracetamol": "acetaminophen", "grossesse": "pregnancy", "gravidez": "pregnancy",
+    "ogm": "genetically modified", "transgenicos": "genetically modified",
+    "transgenico": "genetically modified",
     "refem": "hostage", "refens": "hostages", "otage": "hostage", "mortos": "killed",
     "vitimas": "casualties", "victimes": "casualties", "hospital": "hospital",
     "venezuela": "venezuela", "china": "china", "chine": "china", "ira": "iran",
@@ -293,10 +312,18 @@ def heuristic_analysis(claim: str, language_hint: str | None = None) -> ClaimAna
     english = translate_terms(claim)
     keywords = heuristic_keywords(claim)
     language = heuristic_language(claim, language_hint)
+    if re.search(r"\b(AI|IA)\b", claim):  # upper case only: "ia" is also a Portuguese verb
+        english = list(dict.fromkeys(["artificial intelligence", *english]))
     if language == "en":
         # The claim is already in English: its own words query the international sources.
         english = list(dict.fromkeys([*keywords, *english]))[:8]
-    elif country is CountryContext.FR:
+    elif (
+        country is CountryContext.FR
+        and not language_hint
+        and heuristic_language(claim, "fr") == "fr"
+    ):
+        # a claim about France with no clear Portuguese words is most likely French; a
+        # Portuguese sentence about France ("Macron é presidente da França") stays Portuguese
         language = "fr"
     return ClaimAnalysis(
         country=country,
@@ -307,6 +334,7 @@ def heuristic_analysis(claim: str, language_hint: str | None = None) -> ClaimAna
         domains=heuristic_domains(claim, urls),
         legal_references=[ref.label for ref in parse_legal_references([claim])],
         urls=urls,
+        years=extract_years(claim),
         language=language,
     )
 
@@ -315,7 +343,9 @@ def enrich_analysis(analysis: ClaimAnalysis, claim: str) -> ClaimAnalysis:
     """Merge deterministic extractions into an (LLM-produced) analysis."""
     urls = list(dict.fromkeys([*analysis.urls, *extract_urls(claim)]))
     refs = [ref.label for ref in parse_legal_references([claim])]
-    domains = list(analysis.domains) or heuristic_domains(claim)
+    # The AI's areas plus the ones our fixed rules see: an open model that files an EU
+    # regulation under 'politics' alone would otherwise never reach EUR-Lex.
+    domains = list(dict.fromkeys([*analysis.domains, *heuristic_domains(claim)]))
     if urls and Domain.WEB_HISTORY not in domains:
         domains.append(Domain.WEB_HISTORY)
     return analysis.model_copy(
@@ -324,6 +354,7 @@ def enrich_analysis(analysis: ClaimAnalysis, claim: str) -> ClaimAnalysis:
             "keywords_en": analysis.keywords_en or translate_terms(claim),
             "topics_en": analysis.topics_en or translate_terms(claim),
             "urls": urls[:5],
+            "years": list(dict.fromkeys([*analysis.years, *extract_years(claim)]))[:4],
             "legal_references": list(dict.fromkeys([*analysis.legal_references, *refs]))[:5],
             "domains": domains,
         }

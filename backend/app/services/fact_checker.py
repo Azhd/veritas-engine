@@ -20,6 +20,7 @@ import logging
 from collections.abc import Sequence
 
 from app.connectors.base import BaseGovConnector
+from app.connectors.public_knowledge import UNOFFICIAL_SOURCES
 from app.core.errors import (
     ConnectorError,
     ProviderAuthenticationError,
@@ -36,6 +37,8 @@ from app.engines.prompt_templates.fact_check import (
     build_claim_analysis_prompt,
     build_verdict_prompt,
 )
+from app.engines.verdict_engine import build_audience_report
+from app.schemas.audience import AudienceMode
 from app.schemas.evidence import DEFAULT_DOMAINS, Country, Domain, Evidence, EvidenceQuery
 from app.schemas.fact_check import (
     ASSERTIVE_VERDICTS,
@@ -58,6 +61,9 @@ logger = logging.getLogger(__name__)
 
 #: Upper bound for confidence when the verdict had to be downgraded for lack of citations.
 DOWNGRADED_CONFIDENCE_CAP = 0.5
+#: Upper bound for confidence when a verdict rests only on unreferenced statements of public,
+#: non-official knowledge bases (Wikidata): "probably", never the near-certain stamp.
+UNOFFICIAL_CONFIDENCE_CAP = 0.75
 #: Max items from broad sources (e.g. PubMed) once dedicated sources already answered.
 SECONDARY_RESULTS_CAP = 3
 #: Provider failures that switch the request to citizen mode instead of returning an error.
@@ -96,8 +102,13 @@ class FactCheckService:
         notes: list[str] | None = None,
         source_url: str | None = None,
         language: str | None = None,
+        audience_mode: AudienceMode = AudienceMode.GENERAL_FAMILY,
     ) -> FactCheckReport:
-        """``language`` (pt/en/fr) is the reader's language; defaults to the claim's."""
+        """``language`` (pt/en/fr) is the reader's language; defaults to the claim's.
+
+        ``audience_mode`` only changes how the explanation is written and which sections the app
+        shows first; evidence, verdict and confidence are the same for every reader.
+        """
         notes = list(notes or [])
 
         # 2. context + search terms
@@ -126,13 +137,13 @@ class FactCheckService:
         numbered = [(f"E{i}", item) for i, item in enumerate(evidence, start=1)]
         if llm is None:
             return self._citizen_report(
-                claim, analysis, numbered, queried, failures, notes, reply_language
+                claim, analysis, numbered, queried, failures, notes, reply_language, audience_mode
             )
 
         # 4 + 5. grounded verdict
         try:
             llm_verdict = await llm.generate_structured(
-                build_verdict_prompt(claim, numbered, reply_language),
+                build_verdict_prompt(claim, numbered, reply_language, audience_mode),
                 LLMVerdict,
                 system_instruction=VERDICT_SYSTEM,
                 temperature=0.0,
@@ -140,7 +151,7 @@ class FactCheckService:
         except AI_FAILURES as exc:
             notes.append(_ai_failure_note(exc))
             return self._citizen_report(
-                claim, analysis, numbered, queried, failures, notes, reply_language
+                claim, analysis, numbered, queried, failures, notes, reply_language, audience_mode
             )
 
         # 6. auditable report (only sources actually retrieved can appear)
@@ -159,6 +170,19 @@ class FactCheckService:
                 "nenhuma fonte oficial recuperada foi citada como base."
             )
             verdict, confidence = downgraded, min(confidence, DOWNGRADED_CONFIDENCE_CAP)
+        cited_items = [item for eid, item in numbered if eid in cited]
+        if (
+            verdict in ASSERTIVE_VERDICTS
+            and cited_items
+            and all(item.connector in UNOFFICIAL_SOURCES for item in cited_items)
+            and not any(item.data.get("referenced") for item in cited_items)
+            and confidence > UNOFFICIAL_CONFIDENCE_CAP
+        ):
+            confidence = UNOFFICIAL_CONFIDENCE_CAP
+            notes.append(
+                "Veredito apoiado só em base pública não oficial, sem referência: confiança "
+                f"limitada a {UNOFFICIAL_CONFIDENCE_CAP:.0%}."
+            )
 
         sources = _source_refs(numbered, cited)
         sources.sort(key=lambda s: not s.cited)  # cited sources first, stable otherwise
@@ -177,6 +201,14 @@ class FactCheckService:
             provider=llm.name.value,
             model=llm.model,
             notes=notes,
+            audience=build_audience_report(
+                audience_mode,
+                numbered,
+                cited=cited,
+                search_terms=[*analysis.keywords, *analysis.keywords_en],
+                key_points=llm_verdict.key_points,
+                contradictions=llm_verdict.contradictions,
+            ),
         )
 
     # ------------------------------------------------------------------ steps
@@ -197,16 +229,23 @@ class FactCheckService:
 
     def select_connectors(self, analysis: ClaimAnalysis) -> list[BaseGovConnector]:
         scopes = {*analysis.country.countries(), Country.GLOBAL}
-        if Country.FR in scopes:
+        terms = " ".join([*analysis.keywords, *analysis.keywords_en, *analysis.topics]).lower()
+        # France is in the EU; any claim about "Europe" (e.g. a Brazilian asking about an EU law)
+        # also reaches EU sources.
+        about_europe = "europ" in terms
+        if Country.FR in scopes or about_europe:
             scopes.add(Country.EU)
         domains = set(analysis.domains) or set(DEFAULT_DOMAINS)
         if analysis.urls:
             domains.add(Domain.WEB_HISTORY)
-        return [
+        selected = [
             c
             for c in self.connectors
             if c.enabled and c.country in scopes and (c.domains & domains)
         ]
+        if about_europe:  # the EU act the claim talks about comes before national results
+            selected.sort(key=lambda c: c.country is not Country.EU)
+        return selected
 
     async def collect_evidence(
         self, analysis: ClaimAnalysis
@@ -221,11 +260,12 @@ class FactCheckService:
             countries=sorted(c.value for c in analysis.country.countries()),
             legal_references=analysis.legal_references,
             urls=analysis.urls,
+            years=analysis.years,
             language=analysis.language,
             max_results=self.max_results_per_connector,
         )
         results = await asyncio.gather(
-            *(c.search_evidence(query) for c in selected), return_exceptions=True
+            *(c.search_within_deadline(query) for c in selected), return_exceptions=True
         )
 
         failures: list[ConnectorFailure] = []
@@ -246,7 +286,9 @@ class FactCheckService:
                 continue
             # Sources dedicated to the claim's areas (e.g. Copernicus for a climate claim) come
             # first; broad sources that merely overlap (e.g. PubMed) come after them.
-            (dedicated if connector.domains <= domains else secondary).append(result)
+            # public non-official bases never take the place of official sources
+            official = connector.source_id not in UNOFFICIAL_SOURCES
+            (dedicated if official and connector.domains <= domains else secondary).append(result)
         if any(dedicated):
             secondary = [items[:SECONDARY_RESULTS_CAP] for items in secondary]
 
@@ -269,6 +311,7 @@ class FactCheckService:
         failures: list[ConnectorFailure],
         notes: list[str],
         language: str,
+        audience_mode: AudienceMode = AudienceMode.GENERAL_FAMILY,
     ) -> FactCheckReport:
         notes.append(FREE_KEYS_HINT)
         return FactCheckReport(
@@ -286,6 +329,12 @@ class FactCheckService:
             provider="nenhum",
             model="nenhum",
             notes=notes,
+            # timeline, references and laws need no AI: the citizen mode gets them too
+            audience=build_audience_report(
+                audience_mode,
+                numbered,
+                search_terms=[*analysis.keywords, *analysis.keywords_en],
+            ),
         )
 
 

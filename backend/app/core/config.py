@@ -85,6 +85,8 @@ class Settings(BaseSettings):
     piste_client_id: SecretStr | None = None  # PISTE OAuth: Légifrance + Judilibre
     piste_client_secret: SecretStr | None = None
     piste_sandbox: bool = False
+    # Google Fact Check Tools: checks published by professional fact-checkers (free key)
+    google_factcheck_api_key: SecretStr | None = None
 
     def env_api_key(self, provider: ProviderName) -> SecretStr | None:
         return {

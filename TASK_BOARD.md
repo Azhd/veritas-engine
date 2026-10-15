@@ -42,7 +42,7 @@
 | **Fase 1** | **Fundação & Core:** Estrutura FastAPI, Router BYOK multi-provedor (Gemini, Claude, OpenAI, Groq, Ollama) | `PUBLICADA NO GITHUB` | Claude Code |
 | **Fase 2** | **Conectores de Fontes Primárias & App do Cidadão:** Módulos multidisciplinares assíncronos (`br_gov`, `fr_gov`, `science_health`, `legal_justice`, `global_geopolitics`, `climate_environment`, `web_archive`) + Modo Custo Zero + App Web (`app/web/`) | `PUBLICADA NO GITHUB` (Alpha 1.2, `v1.2.0-alpha`) | Claude Code |
 | **Fase 3** | **Pipeline Multimodal & Forense Digital:** Extração de mídia (`yt-dlp` + FFmpeg), transcrição temporal (Whisper), validação C2PA/EXIF e Dockerização + páginas PT/EN/FR e destaque da confiança | `PUBLICADA NO GITHUB` (`main`) | Claude Code |
-| **Fase 4** | **Motor de Contexto e Adaptação de Audiência:** `verdict_engine.py` com relatórios em três modos (`general_family`, `journalism_student`, `law_academic`) | `BACKLOG` | Claude Code |
+| **Fase 4** | **Motor de Contexto e Adaptação de Audiência:** `verdict_engine.py` com relatórios em três modos (`general_family`, `journalism_student`, `law_academic`) | `PUBLICADA NO GITHUB` (`main`) | Claude Code |
 | **Fase 5** | **Testes Alfa e Consolidação de Release:** Suíte completa de testes E2E, documentação e empacotamento da release Alpha 1.0 | `BACKLOG` | Claude Code |
 
 ---
@@ -196,6 +196,33 @@
 - [x] Garantir 100% de aprovação na suíte de testes (`pytest backend/tests -v`).
 - [x] Atualizar a documentação (pedido do usuário, vale para todas as fases): `README.md` da raiz (como iniciar, o que o app faz, tabela de fases e versões) e `backend/README.md` (rotas, fontes, configuração, estrutura).
 - [x] Atualizar status para `PRONTO PARA REVISÃO DO ANTIGRAVITY`.
+
+---
+
+## 🎯 FASE 4: Motor de Contexto e Adaptação de Audiência
+
+**Status da Fase**: `PUBLICADA NO GITHUB` (mesclada em `main`; branch `feat/fase-4-audiences` preservada)
+**Responsável**: Claude Code (Engenheiro Executor)
+**Meta**: O mesmo conjunto de fatos e evidências oficiais, sintetizado para três públicos (`general_family`, `journalism_student`, `law_academic`), conforme o CLAUDE.md §2.3 e §4.3. *As tarefas abaixo foram detalhadas pelo Claude Code a partir do roadmap, pois o board não trazia tarefas da Fase 4.*
+
+### [TASK 4.1] Esquemas de audiência (`schemas/audience.py`)
+- [x] `AudienceMode` (`general_family`, `journalism_student`, `law_academic`) e `AudienceReport` com seções estruturadas (linha do tempo, histórico de arquivo, citações, referências jurídicas, pontos-chave, contradições), renderizáveis em qualquer idioma da página.
+
+### [TASK 4.2] Motor de veredito com adaptação (`engines/verdict_engine.py`)
+- [x] Instruções de estilo por público no prompt do veredito (sem chamada extra de IA); `LLMVerdict` ganha `key_points` e `contradictions` (validação tolerante).
+- [x] Seções determinísticas, sem IA: linha do tempo, histórico da página no Internet Archive, ABNT NBR 6023 e APA 7 (DOI/PMID), nível de evidência (alto / retratado), referências jurídicas.
+- [x] Regra: público nunca altera evidências, veredito nem confiança.
+
+### [TASK 4.3] API
+- [x] `audience_mode` em `POST /api/v1/fact-check/text` (JSON) e `POST /api/v1/fact-check/media` (formulário); padrão `general_family`; `FactCheckReport.audience` também no modo cidadão.
+
+### [TASK 4.4] App do cidadão
+- [x] Seletor "Para quem é a explicação?" (3 cartões, lembrado no aparelho, nos 3 idiomas).
+- [x] Família: quadro "Por que é falso/verdadeiro, em 1 minuto", usado também no texto do WhatsApp. Jornalismo: método OSINT, linha do tempo, contradições, histórico da página, roteiro para refazer. Direito e pesquisa: fundamentos, referências jurídicas, ABNT/APA com botão copiar.
+- [x] Troca de público após o resultado sem nova requisição; botão "Reescrever para este público" quando a explicação da IA foi escrita para outro.
+
+### [TASK 4.5] Testes e handover
+- [x] `tests/test_audience_modes.py` + extensão dos testes de idioma/mídia; documentação; status `PRONTO PARA REVISÃO DO ANTIGRAVITY`.
 
 ---
 
@@ -373,3 +400,86 @@
 - **Varredura de segredos**: `.env` ignorado pelo `.gitignore`; só `backend/.env.example` (valores vazios) é versionado; nenhum padrão de chave (`gsk_`, `AIza`, `sk-ant-`, `sk-proj-`) nos commits enviados. A chave do usuário fica só no navegador/`.env` local.
 - **Aprovação do Usuário**: [x] SIM | [ ] NÃO
 - **Branch / Repositório Remoto**: `main` → https://github.com/Azhd/veritas-engine · branches preservadas: `feat/fase-3-forense-multimodal`, `feat/multilingue-confiance`.
+
+---
+
+#### Adendo 2026-10-15 (pós Alpha 1.3): qualidade das fontes (branch `feat/qualite-sources`, commit local, sem push)
+- **EUR-Lex**: o ano citado ("adotado em 2024") e o tipo de ato (diretiva / regulamento / decisão, em PT/FR/EN) restringem a busca primeiro e são relaxados se nada aparecer; os resultados são reordenados (ato do ano citado → leis do Parlamento e do Conselho → retificações/atos de execução por último), pois a ordem por data colocava emendas recentes antes do ato original. A sigla "AI"/"IA" (só em maiúsculas: "ia" é verbo em português) vira "artificial intelligence". Afirmação que fala da Europa consulta o EUR-Lex mesmo com país BR, e ele vem primeiro. Verificado ao vivo: o AI Act (Regulamento (UE) 2024/1689) aparece em 1º nas afirmações em PT, EN e FR; a Diretiva 2019/790 continua em 1º/2º.
+- **Brasil em qualquer idioma**: "Brésil"/"Brazil" reconhecidos; o IBGE aceita gatilhos em FR/EN (population, habitants, inhabitants, chômage, unemployment, inflation, prix...). Verificado ao vivo: "Le Brésil compte plus de 200 millions d'habitants" / "Brazil has more than 200 million inhabitants" → população IBGE 2026 = 214.211.951.
+- **Anos citados** (`ClaimAnalysis.years`, `EvidenceQuery.years`), sem confundir com números de lei ou valores.
+- **Testes**: 317 passed (novo `tests/test_source_quality.py`, 17 testes). `ruff` limpo.
+
+---
+
+### 7. Notas de Entrega do Claude Code (Fase 4)
+
+- **Status da Entrega**: `PRONTO PARA REVISÃO DO ANTIGRAVITY`
+- **Data da Entrega**: 2026-10-15
+- **Branch**: `feat/fase-4-audiences`, criada de `feat/qualite-sources` (que traz as melhorias de fontes pós Alpha 1.3, ainda não publicadas). Commits locais, **sem push**.
+- **Arquivos**: novos `app/schemas/audience.py`, `app/engines/verdict_engine.py`, `tests/test_audience_modes.py`; alterados `schemas/fact_check.py` (`audience_mode`, `LLMVerdict.key_points/contradictions`, `FactCheckReport.audience`), `prompt_templates/fact_check.py`, `services/fact_checker.py`, `services/media_checker.py`, `api/v1/fact_check.py`, app web (`index.html`, `app.js`, `styles.css`, `i18n/*.json` com 54 textos novos por idioma), READMEs.
+- **Testes**: **328 passed**, `ruff` limpo.
+- **Verificado**: ao vivo sem IA (FR, "Les vaccins ROR provoquent l'autisme"): referências ABNT/APA corretas com DOI e selo de alto nível de evidência na meta-análise, linha do tempo de 2014 a 2025, troca para Jornalismo sem nova requisição; com resultado de IA simulado: quadro "Pourquoi c'est faux, en 1 minute", texto do WhatsApp com os pontos, aviso de reescrita ao trocar de público; seletor no celular (EN).
+- **Não verificado**: explicações reais da IA nos três estilos (precisa da chave do usuário).
+- **Decisões**:
+  1. Uma única chamada de IA por checagem: o estilo vai no prompt do veredito, e as seções objetivas são calculadas sem IA. Trocar de público reaproveita tudo; só a explicação precisa ser reescrita (nova checagem, sob demanda).
+  2. ABNT segue a convenção brasileira em português ("Disponível em", "Acesso em") e APA em inglês, em qualquer idioma da página, como pedem as normas.
+  3. Não há "modo" no servidor que esconda dados: a resposta traz todas as seções; o público decide o que o app mostra primeiro (auditabilidade).
+
+---
+
+#### Adendo 2026-10-15 (Fase 4): base pública Wikidata para cargos (pedido do usuário)
+- **Problema** (teste real do usuário): "Macron é presidente da Ucrânia" e "Macron é presidente da França" davam "Sem dados suficientes": nenhuma fonte consultada sabe quem ocupa um cargo (data.gouv.fr só tem conjuntos de dados; GDELT estourou o tempo), e a IA é proibida de usar conhecimento próprio.
+- **Entregue**: `app/connectors/public_knowledge.py` (`kb.wikidata`), autorizado pelo usuário com a menção "fonte pública não oficial". Ativado só para afirmações sobre cargos ou pessoas; reconhece ~45 países por nome em PT/EN/FR (evita "Franca", a cidade de SP, e verbos como "usa"/"irá"); busca pessoas no Wikidata e filtra só seres humanos; traz chefe de Estado e de governo atuais e os cargos da pessoa, com datas e se há referência. Resultados sempre depois das fontes oficiais. Selo "Fonte pública não oficial" no app (3 idiomas).
+- **Regra de confiabilidade**: veredito apoiado só em itens não oficiais **sem referência** fica limitado a 75% (nunca "confirmado"), com nota traduzida. Verificado: neste momento os dados de Macron/Zelensky/Lula no Wikidata **não têm referência**, então a regra se aplica a eles. Prompt do veredito instruído a dizer que a fonte é não oficial.
+- **Correções juntas**: o cartão PNG não mostra mais o título "Fontes oficiais" vazio nem corta a frase de confiança; uma frase em português sobre a França não é mais tratada como francesa (rótulos e busca no idioma certo).
+- **Verificado ao vivo**: "Macron é presidente da ucrania" → Wikidata: chefe de Estado da Ucrânia = Volodymyr Zelensky (desde 20/05/2019) e cargos de Macron (Presidente da França desde 14/05/2017); "Lula is the president of Brazil" → Lula desde 01/01/2023. Afirmações sem cargo não fazem nenhuma chamada ao Wikidata.
+- **Testes**: 338 passed (novo `tests/test_public_knowledge.py`). Commit local, sem push.
+- **Para o Antigravity**: o usuário pediu também outras bases públicas confiáveis "cuja veracidade é confirmada"; lista de candidatas apresentada no chat para aprovação antes de implementar.
+
+---
+
+#### Adendo 2026-10-15 (Fase 4): verificação ao vivo de todos os conectores (pedido do usuário)
+- **Ferramenta**: `python -m app.connectors.healthcheck` testa cada fonte com uma afirmação que ela deveria responder (OK / EMPTY / FAIL / DISABLED). Teste garante que toda fonte registrada tem uma afirmação de teste.
+- **1ª rodada**: OK 10 · EMPTY 3 · FAIL 2 · DISABLED 4. **Rodada final**: **OK 14 · EMPTY 0 · FAIL 1 · DISABLED 4**.
+- **Corrigido**:
+  - Câmara e Senado vazios para "reforma tributária": a busca levava "tributária deputados aprovou". Verbos legislativos e nomes das casas (aprovou, câmara, deputados, senado, federal...) saíram dos termos de busca. Agora: PLP 236/2026 (Câmara), PL 2584/2026 (Senado).
+  - OMS vazia para cobertura vacinal de sarampo: pegava os 2 primeiros indicadores do 1º termo ("coverage" → pré-natal). Agora os indicadores são ordenados pelo número de palavras da afirmação no nome (mínimo 2 quando há várias) e só contam se tiverem dados do país. Efeito extra: "vacinas causam autismo" não traz mais coberturas vacinais sem relação.
+  - **Prazo total por fonte** (`deadline_seconds`, 16 s; datasets em lote: download + 8 s): antes, a Wayback com 4 tentativas de 8 s segurava a checagem inteira ~37 s.
+  - Wayback: no máximo 1 nova tentativa; as duas consultas CDX e os dois títulos rodam em paralelo (títulos com 5 s no máximo); amostra de uma captura por mês (`collapse=timestamp:6`, ~4 s) no lugar de `collapse=digest` (10–25 s em páginas muito arquivadas). gov.br: de FAIL (16 s) para OK (~10 s).
+- **Ainda falhando (externo)**: **GDELT** responde em 13–42 s ou HTTP 429 (sobrecarga do serviço), acima do limite de 8 s do CLAUDE.md; segue best-effort (falha graciosa, pausa de 60 s após erro), como homologado na Fase 2. NOAA teve uma queda passageira numa rodada e voltou (0,3 s).
+- **Desativados por falta de credencial gratuita**: Portal da Transparência, Légifrance, Judilibre (PISTE) e ReliefWeb.
+- **Testes**: 362 passed (novo `tests/test_connector_health.py`). Commit local, sem push.
+
+---
+
+#### Adendo 2026-10-15 (Fase 4): bases públicas confiáveis (pedido do usuário)
+- **Pedido**: "Ajoute les 4 recommandées : Banque mondiale, Google Fact Check (clé optionnelle), Crossref (rétractations) et Eurostat."
+- **Entregue** (23 conectores; 18 sem credencial):
+  - `intl.worldbank` (`international.py`): Banco Mundial para qualquer país citado (desemprego, inflação, população, PIB e crescimento, expectativa de vida, pobreza extrema). Ex. ao vivo: desemprego da Argentina.
+  - `eu.eurostat` (`international.py`): mesmos indicadores para países da UE e para a UE (EU27). Ex.: desemprego da Alemanha.
+  - `science.crossref` (`scholarly.py`): avisos de retratação (editoras + Retraction Watch) quando a afirmação cita um estudo; o título do artigo retratado é consultado e só ficam retratações com ao menos 2 palavras da afirmação (sem contar "estudo", "provou"...). Ao vivo: estudos retratados sobre ivermectina e covid, hidroxicloroquina e covid, e o estudo Séralini (OGM e câncer em ratos, retratado em 2013). Selo vermelho "Artigo retratado" no app. Limite: o artigo de Wakefield (vacina e autismo) não aparece porque seu título não cita vacina nem autismo.
+  - `factcheck.google` (`fact_checks.py`): checagens de agências profissionais; desativado sem `VERITAS_GOOGLE_FACTCHECK_API_KEY` (grátis). A chave vai no header `X-Goog-Api-Key`, nunca na URL (testado).
+  - `countries.py`: tabela única de ~40 países (PT/EN/FR → ISO2 e Wikidata), usada também pelo Wikidata.
+  - App: nova área "Checagens jornalísticas" (3 idiomas). Prompt: Banco Mundial e Eurostat como estatísticas oficiais; retratação derruba o estudo; checagens citadas com agência e classificação.
+- **Verificação ao vivo** (`healthcheck`): Banco Mundial, Eurostat e Crossref OK; Google Fact Check DISABLED (sem chave). Total na rodada: OK 15 · FAIL 2 (GDELT sobrecarregado; Wayback acima de 16 s nesse momento, latência variável de 4 a 20 s do Internet Archive) · DISABLED 5.
+- **Testes**: 385 passed (novo `tests/test_trusted_bases.py`). Commit local, sem push.
+
+---
+
+#### Adendo 2026-10-15 (Fase 4): áreas da triagem por IA + regras fixas
+- **Teste do usuário com Groq**: "L'Union européenne a adopté en 2024 un règlement sur l'intelligence artificielle" → "Données insuffisantes", 0 fonte (sem IA, o Regulamento 2024/1689 aparecia). Causa reproduzida: o modelo classificou a afirmação só como política; o EUR-Lex (área jurídica) nem era consultado, e as áreas das regras fixas só entravam quando a IA não dava nenhuma.
+- **Correção**: as áreas da IA agora são **somadas** às das regras fixas ("règlement" → jurídico). Reproduzido com triagens simuladas: os 3 cenários (só política / sem área / jurídico) trazem o Regulamento (UE) 2024/1689 em 1º.
+- Séries do Banco Mundial e do Eurostat passam a 7 anos ("desde 2020" precisa de 2020).
+- 386 testes. Commit local, sem push.
+
+---
+
+### 8. Validação do Usuário & Publicação Remota (Fase 4)
+
+- **Status de Publicação**: `PUBLICADA NO GITHUB` na `main` (merge de `feat/fase-4-audiences`, que inclui `feat/qualite-sources`).
+- **Pedido do usuário** (2026-10-15): "Push en version stable et attends le next step", depois de testar localmente com o Groq.
+- **Conteúdo**: modos de audiência (Fase 4), Wikidata (não oficial, confiança limitada sem referência), Banco Mundial, Eurostat, Crossref (retratações), Google Fact Check (chave opcional), verificação ao vivo dos conectores (`app.connectors.healthcheck`), prazo total por fonte, correções de Câmara/Senado/OMS/Wayback/EUR-Lex, áreas da IA somadas às regras fixas, cartão PNG corrigido.
+- **Varredura de segredos**: `.env` ignorado; só `backend/.env.example` (valores vazios) versionado; nenhum padrão de chave nos 9 commits enviados.
+- **Testes**: 386 passed, `ruff` limpo.
+- **Aprovação do Usuário**: [x] SIM | [ ] NÃO
+- **Branch / Repositório Remoto**: `main` → https://github.com/Azhd/veritas-engine · branches preservadas: `feat/qualite-sources`, `feat/fase-4-audiences`. Sem tag nova (última: `v1.3.0-alpha`).

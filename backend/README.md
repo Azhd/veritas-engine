@@ -116,8 +116,17 @@ cidadão e explica o motivo em `notes`.
 | `global_geopolitics.py` | ReliefWeb (ONU/OCHA) | `VERITAS_RELIEFWEB_APPNAME` aprovado |
 | `climate_environment.py` | Copernicus C3S/ECMWF (ERA5 diário), NOAA NCEI (anual) | não |
 | `web_archive.py` | Internet Archive (Wayback Machine) | não |
+| `international.py` | **Banco Mundial** (WDI, todos os países) e **Eurostat** (UE e países-membros): desemprego, inflação, população, PIB e crescimento, expectativa de vida, pobreza extrema | não |
+| `scholarly.py` | **Crossref**: avisos de retratação (editoras + Retraction Watch) sobre o tema da afirmação, só quando ela cita um estudo; mantém só retratações cujo artigo tem ao menos 2 palavras da afirmação | não |
+| `fact_checks.py` | **Google Fact Check Tools**: checagens publicadas por agências (ClaimReview) | `VERITAS_GOOGLE_FACTCHECK_API_KEY` (grátis; vai num header, nunca na URL) |
+| `public_knowledge.py` | **Wikidata** (base pública colaborativa, **não oficial**): chefes de Estado/governo atuais (P35/P6) e cargos de pessoas (P39), com datas e indicação de referência | não |
 
-São 18 conectores, 14 sem nenhuma credencial. Fontes sem a credencial ficam registradas como
+São 23 conectores, 18 sem nenhuma credencial (`countries.py` reconhece ~40 países por nome em
+PT/EN/FR para Banco Mundial, Eurostat e Wikidata). O Wikidata só é consultado quando a afirmação fala
+de um cargo (presidente, ministro, rei, prefeito...) ou de uma pessoa; seus resultados ficam sempre
+depois das fontes oficiais, têm `data.official = false` e `data.referenced` (o Wikidata cita uma
+fonte para aquele dado?). Se o veredito se apoiar só em itens não oficiais sem referência, a
+confiança é limitada a 0,75 e uma nota explica o motivo. Fontes sem a credencial ficam registradas como
 desativadas (`GET /api/v1/connectors` mostra o motivo) e nunca bloqueiam a checagem.
 
 **Roteamento por domínio:** cada conector declara `domains` (`politics_legislation`,
@@ -127,9 +136,34 @@ Senado/STJ/EUR-Lex; clima → Copernicus/NOAA; URL citada → Wayback). Fontes d
 aparecem primeiro; fontes amplas (PubMed) ficam limitadas a 3 resultados quando as dedicadas já
 responderam.
 
-**Resiliência:** timeout de 8 s por consulta, retentativas com backoff exponencial e cache TTL. Exceções
+**Resiliência:** timeout de 8 s por consulta, retentativas com backoff exponencial, cache TTL e um
+**prazo total por fonte** (`deadline_seconds`: 16 s, ou o tempo de download + 8 s nos datasets em
+lote), para que uma fonte lenta nunca segure a checagem inteira. Exceções
 homologadas: downloads em lote (STJ, Copernicus) usam `VERITAS_DATASET_TIMEOUT_SECONDS` (30 s) e
 cache longo; GDELT e Wayback são best-effort (GDELT com intervalo mínimo de 5,5 s entre chamadas).
+
+## Públicos (`audience_mode`, Fase 4)
+
+`app/engines/verdict_engine.py` adapta a mesma checagem a três leitores, sem mudar evidências,
+veredito nem confiança:
+
+- **Estilo da IA**: `audience_instructions(mode)` entra no prompt do veredito (nenhuma chamada extra
+  de IA, importante nos planos grátis). O modelo devolve também `key_points` (até 3) e
+  `contradictions`, validados de forma tolerante.
+- **Seções determinísticas** (`build_audience_report`, também no modo cidadão): linha do tempo das
+  fontes (publicação, texto legal, dado oficial, 1ª/última captura no Internet Archive), histórico
+  da página citada (versões, título alterado, removida), referências **ABNT NBR 6023** e **APA 7**
+  com DOI/PMID, nível de evidência (PubMed: revisão sistemática/meta-análise/ECR ou retratado) e
+  referências jurídicas (norma, CELEX, tema do STJ, proposição, matéria, Légifrance, pourvoi).
+- **Resposta**: `FactCheckReport.audience` (`app/schemas/audience.py`) traz todas as seções e o
+  `mode` para o qual a explicação foi escrita. O app mostra as seções do público escolhido e troca
+  de público sem nova requisição.
+
+| Modo | Explicação | Seções no app |
+| --- | --- | --- |
+| `general_family` (padrão) | Simples, parágrafos curtos | "Por que é falso/verdadeiro, em 1 minuto" (também no WhatsApp) |
+| `journalism_student` | Raciocínio OSINT, datas, o que falta confirmar | Método, linha do tempo, contradições, histórico da página, roteiro para refazer |
+| `law_academic` | Técnica: normas, CELEX, tipo de estudo, PMID/DOI | Fundamentos, referências jurídicas, ABNT/APA com cópia |
 
 ## Perícia multimodal (`app/forensics/`)
 
@@ -156,7 +190,18 @@ cd backend
 .venv/Scripts/ruff check . && .venv/Scripts/ruff format --check .
 ```
 
-298 testes; nenhum faz chamadas de rede reais (SDKs e APIs públicas são mockados). Os testes de
+**As fontes estão respondendo?** Teste ao vivo de todos os conectores (chamadas reais, nenhuma
+chave de IA envolvida), cada um com uma afirmação que deveria encontrar:
+
+```bash
+.venv/Scripts/python -m app.connectors.healthcheck              # todos
+.venv/Scripts/python -m app.connectors.healthcheck br.ibge web.wayback   # só alguns
+```
+
+Resultado por fonte: `OK` (respondeu com evidência), `EMPTY` (respondeu sem nada), `FAIL` (erro ou
+tempo esgotado) ou `DISABLED` (falta a credencial gratuita). O código de saída é 1 se houver `FAIL`.
+
+385 testes; nenhum faz chamadas de rede reais (SDKs e APIs públicas são mockados). Os testes de
 mídia (`tests/test_media_forensics.py`) usam um FFmpeg falso e imagens geradas na hora; os de C2PA
 assinam JPEGs com uma cadeia de certificados descartável e são pulados se o `c2pa-python` não estiver
 instalado.
@@ -198,8 +243,8 @@ curl -X POST http://127.0.0.1:8000/api/v1/fact-check/media \
 
 | Rota | Descrição |
 | --- | --- |
-| `POST /api/v1/fact-check/text` | Checagem (`claim`, `country`, `source_url` e `language` = `pt`/`en`/`fr` opcionais); sem IA devolve `SEM_CHAVE_IA_DADOS_BRUTOS` |
-| `POST /api/v1/fact-check/media` | Multipart: `file` (até 50 MB) **ou** `url`, mais `claim`, `country` e `language` opcionais. Devolve `forensics` (laudo) e `checks` (afirmações com minutagem e o relatório de cada uma) |
+| `POST /api/v1/fact-check/text` | Checagem (`claim`, `country`, `source_url` `language` = `pt`/`en`/`fr` e `audience_mode` opcionais); sem IA devolve `SEM_CHAVE_IA_DADOS_BRUTOS` |
+| `POST /api/v1/fact-check/media` | Multipart: `file` (até 50 MB) **ou** `url`, mais `claim`, `country`, `language` e `audience_mode` opcionais. Devolve `forensics` (laudo) e `checks` (afirmações com minutagem e o relatório de cada uma) |
 | `GET /api/v1/media/capabilities` | Ferramentas de mídia disponíveis, o que dá para analisar e o que falta instalar |
 | `POST /api/v1/byok/test` | Testa a chave/modelo informados nos headers (`{ok, provider, model, message}`) |
 | `GET /api/v1/byok/providers` | Provedores (gratuitos primeiro) com o passo a passo para obter a chave |
@@ -225,7 +270,8 @@ app/
 ├── core/                       # config (pydantic-settings, prefixo VERITAS_), erros → HTTP
 ├── api/deps.py                 # provedor BYOK opcional por requisição (criado e descartado)
 ├── api/v1/                     # fact_check.py (/text, /media), connectors.py, byok.py, media.py
-├── engines/                    # base.py (BaseLLMProvider), factory.py, providers/, prompt_templates/
+├── engines/                    # base.py (BaseLLMProvider), factory.py, providers/, prompt_templates/,
+│                               # verdict_engine.py (públicos: estilo + seções)
 ├── connectors/                 # base.py, br_gov, fr_gov, legal_justice, science_health,
 │                               # global_geopolitics, climate_environment, web_archive,
 │                               # piste (OAuth), registry

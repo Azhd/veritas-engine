@@ -279,7 +279,17 @@ INDICATORS: tuple[IbgeIndicator, ...] = (
         variavel=2265,
         periodos="-12",
         period_kind="monthly",
-        triggers=("inflacao", "ipca", "precos", "custo de vida"),
+        triggers=(
+            "inflacao",
+            "ipca",
+            "precos",
+            "custo de vida",
+            "inflation",
+            "prix",
+            "prices",
+            "cout de la vie",
+            "cost of living",
+        ),
     ),
     IbgeIndicator(
         key="desocupacao",
@@ -288,7 +298,16 @@ INDICATORS: tuple[IbgeIndicator, ...] = (
         variavel=4099,
         periodos="-4",
         period_kind="quarterly",
-        triggers=("desemprego", "desocupacao", "desempregados", "emprego"),
+        triggers=(
+            "desemprego",
+            "desocupacao",
+            "desempregados",
+            "emprego",
+            "chomage",
+            "unemployment",
+            "jobless",
+            "employment",
+        ),
     ),
     IbgeIndicator(
         key="populacao",
@@ -297,7 +316,16 @@ INDICATORS: tuple[IbgeIndicator, ...] = (
         variavel=9324,
         periodos="-3",
         period_kind="yearly",
-        triggers=("populacao", "habitantes", "demografia", "demografic"),
+        triggers=(
+            "populacao",
+            "habitantes",
+            "demografia",
+            "demografic",
+            "population",
+            "habitant",
+            "inhabitant",
+            "demograph",
+        ),
     ),
 )
 
@@ -347,7 +375,8 @@ class IbgeConnector(BaseGovConnector):
         )
 
     async def search_evidence(self, query: EvidenceQuery) -> list[Evidence]:
-        haystack = normalize(" ".join([*query.keywords, *query.topics]))
+        # English/French terms too: a claim about Brazil may be written in any page language.
+        haystack = normalize(" ".join([*query.keywords, *query.topics, *query.keywords_en]))
         evidence: list[Evidence] = []
         for indicator in INDICATORS:
             if not _matches(haystack, indicator.triggers):

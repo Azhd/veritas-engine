@@ -81,7 +81,17 @@ def test_enrich_keeps_llm_values_and_adds_deterministic_extractions():
     assert enriched.keywords_en == ["vaccine autism"]  # LLM value kept
     assert enriched.urls == ["http://boato.com"]
     assert enriched.legal_references == ["Lei 8080/1990"]
-    assert enriched.domains == [Domain.HEALTH_SCIENCE, Domain.WEB_HISTORY]
+    # the cited law adds the legal area to the AI's health area
+    assert enriched.domains == [Domain.HEALTH_SCIENCE, Domain.LEGAL_JUSTICE, Domain.WEB_HISTORY]
+
+
+def test_enrich_adds_rule_based_areas_the_ai_missed():
+    # An open model filed this EU regulation under politics only: EUR-Lex was never queried.
+    llm = ClaimAnalysis(domains=[Domain.POLITICS_LEGISLATION], keywords=["Union européenne"])
+    claim = "L’Union européenne a adopté en 2024 un règlement sur l’intelligence artificielle."
+    enriched = enrich_analysis(llm, claim)
+    assert enriched.domains[0] is Domain.POLITICS_LEGISLATION  # the AI's areas come first
+    assert Domain.LEGAL_JUSTICE in enriched.domains
 
 
 def test_unknown_llm_domains_are_dropped():

@@ -236,7 +236,7 @@ class TestEurLex:
             return json_response({"results": {"bindings": []}})
 
         conn = EurLexConnector(mock_client(handler))
-        await conn.search_acts(['ai")) } DROP ALL #', "x"])
+        await conn.search_acts(['zz")) } DROP ALL #', "x"])
         query = seen[0]
         # Quotes, braces and noise words are stripped before reaching the text index.
         assert '?title bif:contains \'"drop" AND "all"\'' in query

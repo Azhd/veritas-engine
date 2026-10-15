@@ -17,9 +17,10 @@
   com carimbo (**CONFIRMADO** em verde ou **FALSO** em vermelho) e uma régua de Falso a Verdadeiro.
 - Leve: cada página tem cerca de 130 KB e funciona no celular.
 
-> **Status:** versão **Alpha 1.3** (tag `v1.3.0-alpha`) publicada na `main`: perícia de vídeo, áudio e
-> imagens (Fase 3), páginas em português, inglês e francês e destaque da confiança. Próxima etapa:
-> Fase 4 (relatórios por público).
+> **Status:** a **Fase 4** (relatórios por público: família, jornalismo, direito e pesquisa) está
+> publicada na `main`, com novas bases confiáveis (Banco Mundial, Eurostat, Crossref, Wikidata e Google
+> Fact Check) e a verificação ao vivo das fontes. Última versão marcada: **Alpha 1.3**
+> (`v1.3.0-alpha`). Próxima etapa: Fase 5 (testes completos e release Alpha 1.0).
 
 ---
 
@@ -108,8 +109,22 @@ Com IA, a **confiança** aparece de três jeitos:
 | **Baixa** (menos de 55%) | Cartão discreto com o aviso "leia as fontes antes de concluir" |
 
 Em todos os casos, uma **régua de Falso a Verdadeiro** mostra onde o veredito ficou. O cartão em
-imagem e a mensagem do WhatsApp também levam o nível de confiança. Dá para enviar o resultado no WhatsApp,
-copiar o resumo ou baixar um cartão em imagem.
+imagem e a mensagem do WhatsApp também levam o nível de confiança. Dá para enviar o resultado no
+WhatsApp, copiar o resumo ou baixar um cartão em imagem.
+
+### Para quem é a explicação? (Fase 4)
+
+Antes de verificar, escolha o público. As fontes, o veredito e a confiança são **os mesmos**; muda
+a forma de explicar e o que aparece abaixo do resumo:
+
+| Público | O que você recebe |
+| --- | --- |
+| **Família** | Linguagem simples e o quadro **"Por que é falso/verdadeiro, em 1 minuto"**, que vai direto na mensagem do WhatsApp |
+| **Jornalismo** | Método da checagem (termos pesquisados, bases consultadas, o que respondeu), **linha do tempo** das fontes, contradições entre fontes, **histórico da página citada** no Internet Archive (mudou? foi apagada?) e um roteiro para refazer a checagem |
+| **Direito e pesquisa** | Fundamentos, **referências jurídicas** (leis, atos da UE com CELEX, teses do STJ) e **referências ABNT e APA** prontas para copiar, com DOI e PMID e o aviso de alto nível de evidência ou de artigo retratado |
+
+Linha do tempo, histórico e referências funcionam **sem IA**. Trocar de público depois do resultado
+muda as seções na hora; o botão "Reescrever para este público" refaz só a explicação da IA.
 
 Para fotos, vídeos e áudios aparecem também:
 
@@ -145,9 +160,19 @@ servidor usa a chave apenas durante cada verificação e nunca a guarda.
 | Clima e ambiente | Copernicus (União Europeia), NOAA (EUA) |
 | Mundo e conflitos | GDELT, ReliefWeb (ONU)* |
 | Memória da web | Internet Archive (Wayback Machine) |
+| Estatísticas de todos os países | Banco Mundial (desemprego, inflação, população, PIB, expectativa de vida, pobreza) e Eurostat (União Europeia) |
+| Estudos retratados | Crossref, o registro oficial de DOIs, com a base Retraction Watch: avisa quando o "estudo que provou" foi retirado |
+| Checagens jornalísticas* | Google Fact Check Tools: o que agências como Lupa, Aos Fatos, AFP e Les Décodeurs já verificaram |
+| Quem ocupa um cargo ⚠️ | Wikidata (base pública colaborativa, **não oficial**): chefes de Estado e de governo atuais e cargos de uma pessoa |
 
 \* Precisam de uma credencial gratuita configurada no servidor; sem ela, ficam desligadas e não
 atrapalham nada. As demais funcionam sem cadastro.
+
+⚠️ Nenhuma API oficial responde "quem é o presidente de tal país". Para isso o Veritas usa o
+Wikidata, sempre marcado como **"Fonte pública não oficial"** e consultado depois das fontes
+oficiais. Cada dado diz se o Wikidata tem referência para ele; um veredito que só se apoia em dados
+**sem referência** fica limitado a **75% de confiança** (aparece como "provavelmente", nunca com o
+carimbo de confirmado).
 
 Cada afirmação só consulta as áreas a que pertence (saúde vai para PubMed e OMS; leis vão para o
 Senado, o STJ e o EUR-Lex...). Se uma fonte não responder a tempo, a verificação continua com as
@@ -162,7 +187,7 @@ outras.
 | 1 | Fundação: API, motor de IA "traga sua própria chave" (Gemini, Groq, Ollama, Claude, OpenAI) | Publicada |
 | 2 | Fontes primárias em 7 áreas, modo cidadão sem chave e app web | Publicada (Alpha 1.2) |
 | 3 | Vídeo, áudio e imagens: transcrição com minutagem, metadados EXIF, detecção de IA (C2PA), Docker; páginas PT/EN/FR | Publicada (Alpha 1.3) |
-| 4 | Relatórios por público: família, estudante de jornalismo, área jurídica/acadêmica | Planejada |
+| 4 | Relatórios por público: família, estudante de jornalismo, área jurídica/acadêmica; novas bases confiáveis | Publicada |
 | 5 | Testes completos e release Alpha 1.0 | Planejada |
 
 O andamento detalhado de cada fase está no [TASK_BOARD.md](TASK_BOARD.md).

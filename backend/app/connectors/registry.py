@@ -15,8 +15,10 @@ from app.connectors.br_gov import (
     TransparenciaConnector,
 )
 from app.connectors.climate_environment import CopernicusClimateConnector, NoaaClimateConnector
+from app.connectors.fact_checks import GoogleFactCheckConnector
 from app.connectors.fr_gov import DataGouvConnector, InseeConnector, LegifranceConnector
 from app.connectors.global_geopolitics import GdeltConnector, ReliefWebConnector
+from app.connectors.international import EurostatConnector, WorldBankConnector
 from app.connectors.legal_justice import (
     BrLegislationConnector,
     CourDeCassationConnector,
@@ -24,6 +26,8 @@ from app.connectors.legal_justice import (
     StjPrecedentsConnector,
 )
 from app.connectors.piste import PisteAuth
+from app.connectors.public_knowledge import WikidataConnector
+from app.connectors.scholarly import CrossrefRetractionsConnector
 from app.connectors.science_health import PubMedConnector, WhoGhoConnector
 from app.connectors.web_archive import WaybackConnector
 from app.core.config import Settings
@@ -53,6 +57,13 @@ CONNECTOR_CLASSES: tuple[type[BaseGovConnector], ...] = (
     CopernicusClimateConnector,
     NoaaClimateConnector,
     WaybackConnector,
+    # International official statistics, research integrity, professional fact-checks
+    WorldBankConnector,
+    EurostatConnector,
+    CrossrefRetractionsConnector,
+    GoogleFactCheckConnector,
+    # Public knowledge bases (not official; listed last)
+    WikidataConnector,
 )
 
 

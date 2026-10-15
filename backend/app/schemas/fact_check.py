@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.schemas.audience import AudienceMode, AudienceReport
 from app.schemas.evidence import Country, Domain
 from app.schemas.forensics import MediaForensicsReport
 
@@ -64,6 +65,14 @@ class TextFactCheckRequest(BaseModel):
         default=None,
         description="Idioma da explicação (pt, en, fr). Sem ele, usa o idioma da afirmação.",
     )
+    audience_mode: AudienceMode = Field(
+        default=AudienceMode.GENERAL_FAMILY,
+        description=(
+            "Para quem a explicação é escrita: general_family (linguagem simples), "
+            "journalism_student (método OSINT, linha do tempo, contradições) ou law_academic "
+            "(leis, jurisprudência, referências ABNT/APA)."
+        ),
+    )
 
     @field_validator("source_url")
     @classmethod
@@ -87,6 +96,7 @@ class TextFactCheckRequest(BaseModel):
 
 # ---------------------------------------------------------------- LLM intermediate outputs
 _LIST_LIMITS = {
+    "years": 4,
     "keywords": 8,
     "keywords_en": 8,
     "people": 5,
@@ -124,6 +134,7 @@ class ClaimAnalysis(BaseModel):
     topics: list[str] = Field(default_factory=list, max_length=5)
     topics_en: list[str] = Field(default_factory=list, max_length=5)
     legal_references: list[str] = Field(default_factory=list, max_length=5)
+    years: list[str] = Field(default_factory=list, max_length=4, description="Years cited.")
     urls: list[str] = Field(default_factory=list, max_length=5)
     language: str = Field(default="pt", description="ISO 639-1 language of the claim.")
 
@@ -165,6 +176,24 @@ class LLMVerdict(BaseModel):
     confidence_score: float = Field(ge=0.0, le=1.0)
     explanation: str = Field(min_length=1)
     cited_evidence_ids: list[str] = Field(default_factory=list)
+    key_points: list[str] = Field(
+        default_factory=list, description="Até 3 pontos curtos, conforme o público."
+    )
+    contradictions: list[str] = Field(
+        default_factory=list, description="Divergências entre as fontes (pode ser vazio)."
+    )
+
+    @field_validator("key_points", "contradictions", mode="before")
+    @classmethod
+    def _short_lists(cls, value: Any) -> list[str]:
+        # open models send a string, a list of dicts or 6 items: keep 3 plain sentences
+        items = value if isinstance(value, list | tuple) else ([value] if value else [])
+        texts = [
+            str(item.get("text") or next(iter(item.values()), "")) if isinstance(item, dict)
+            else str(item)
+            for item in items
+        ]  # fmt: skip
+        return [t.strip()[:400] for t in texts if t and t.strip()][:3]
 
     @field_validator("verdict", mode="before")
     @classmethod
@@ -243,6 +272,9 @@ class FactCheckReport(BaseModel):
     model: str
     checked_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     notes: list[str] = Field(default_factory=list)
+    audience: AudienceReport | None = Field(
+        default=None, description="Seções por público (linha do tempo, referências, leis...)."
+    )
 
     def model_post_init(self, __context: Any) -> None:
         self.confidence_score = round(self.confidence_score, 3)
