@@ -9,15 +9,15 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app.connectors.br.camara_connector import CamaraConnector
-from app.connectors.br.ibge_connector import IbgeConnector
-from app.connectors.fr.data_gouv_connector import DataGouvConnector
+from app.connectors.br_gov import CamaraConnector, IbgeConnector
+from app.connectors.fr_gov import DataGouvConnector
 from app.core.config import ProviderName
-from app.core.errors import ProviderAuthenticationError
+from app.core.errors import ProviderAuthenticationError, ProviderRateLimitError
 from app.engines.factory import ProviderFactory
 from app.main import create_app
 from app.schemas.fact_check import CountryContext
-from app.services.fact_checker import FactCheckService, heuristic_country, heuristic_keywords
+from app.services.claim_heuristics import heuristic_country, heuristic_keywords
+from app.services.fact_checker import FactCheckService
 from tests.conftest import FakeLLMProvider, SleepRecorder, json_response, make_settings
 from tests.test_gov_connectors import CAMARA_PROPOSICOES, DATA_GOUV_DATASETS, IBGE_IPCA
 
@@ -36,10 +36,16 @@ class ScriptedProvider(FakeLLMProvider):
         ScriptedProvider.instances.append(self)
 
 
-def analysis(country: str = "BR", keywords=None, people=None, topics=None, language="pt") -> str:
+DEFAULT_TEST_DOMAINS = ["politics_legislation", "economy_statistics"]
+
+
+def analysis(
+    country: str = "BR", keywords=None, people=None, topics=None, language="pt", domains=None
+) -> str:
     return json.dumps(
         {
             "country": country,
+            "domains": DEFAULT_TEST_DOMAINS if domains is None else domains,
             "keywords": keywords or ["reforma tributária"],
             "people": people or [],
             "topics": topics or [],
@@ -228,25 +234,65 @@ def test_invalid_triage_output_falls_back_to_heuristics(client):
 
 
 # =============================================================== BYOK over HTTP
-def test_missing_provider_header_returns_400(client):
-    response = client.post(ENDPOINT, json={"claim": "Uma alegação qualquer."})
-    assert response.status_code == 400
-    assert response.json()["error"]["code"] == "provider_configuration_error"
+def test_no_ai_key_runs_citizen_mode_with_raw_official_data(client, upstream):
+    # Zero-cost principle: no key must never block the citizen (no HTTP 400).
+    response = client.post(ENDPOINT, json={"claim": "A inflação no Brasil passou de 10%."})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["verdict"] == "SEM_CHAVE_IA_DADOS_BRUTOS"
+    assert body["ai_used"] is False
+    assert body["provider"] == "nenhum"
+    assert body["confidence_score"] == 0.0
+    assert "Modo cidadão" in body["explanation"]
+    assert body["primary_sources"], "official evidence must still be delivered"
+    assert any(s["connector"] == "br.ibge" for s in body["primary_sources"])
+    assert any("aistudio.google.com" in note for note in body["notes"])
+    assert ScriptedProvider.instances == []
 
 
-def test_missing_key_returns_400(client):
+def test_missing_key_falls_back_to_citizen_mode(client):
     response = client.post(
         ENDPOINT, json={"claim": "Uma alegação qualquer."}, headers={"X-Provider": "openai"}
     )
-    assert response.status_code == 400
-    assert "X-API-Key" in response.json()["error"]["message"]
+    assert response.status_code == 200
+    body = response.json()
+    assert body["verdict"] == "SEM_CHAVE_IA_DADOS_BRUTOS"
+    assert any("X-API-Key" in note for note in body["notes"])
 
 
-def test_provider_auth_error_returns_401_without_leaking_key(client):
+def test_unknown_provider_falls_back_to_citizen_mode(client):
+    response = client.post(
+        ENDPOINT,
+        json={"claim": "Uma alegação qualquer."},
+        headers={"X-Provider": "skynet", "X-API-Key": "sk-x"},
+    )
+    assert response.status_code == 200
+    assert response.json()["verdict"] == "SEM_CHAVE_IA_DADOS_BRUTOS"
+
+
+def test_provider_auth_error_falls_back_without_leaking_key(client):
     ScriptedProvider.script = [ProviderAuthenticationError("openai: API key rejected.")]
     response = client.post(ENDPOINT, json={"claim": "Uma alegação qualquer."}, headers=HEADERS)
-    assert response.status_code == 401
+    assert response.status_code == 200
+    body = response.json()
+    assert body["verdict"] == "SEM_CHAVE_IA_DADOS_BRUTOS"
+    assert any("API key rejected" in note for note in body["notes"])
     assert "sk-user-secret-123" not in response.text
+
+
+def test_free_tier_quota_exhausted_during_verdict_keeps_evidence(client, upstream):
+    ScriptedProvider.script = [
+        analysis("BR", keywords=["inflação"], topics=["inflação"]),
+        ProviderRateLimitError("gemini: rate limit or quota exceeded."),
+    ]
+    body = client.post(
+        ENDPOINT, json={"claim": "A inflação passou de 10%."}, headers=HEADERS
+    ).json()
+    assert body["verdict"] == "SEM_CHAVE_IA_DADOS_BRUTOS"
+    assert len(body["primary_sources"]) == 2
+    # Evidence was fetched only once (no second round of connector calls after the failure).
+    assert upstream.hits.count("servicodados.ibge.gov.br") == 1
+    assert any("quota" in note for note in body["notes"])
 
 
 def test_key_is_passed_per_request_and_not_echoed(client):
@@ -275,6 +321,8 @@ def test_byok_discovery_endpoint(client):
     assert body["headers"] == ["X-Provider", "X-API-Key", "X-Endpoint-URL", "X-Model"]
     assert [p["name"] for p in body["providers"]] == ["openai"]
     assert body["providers"][0]["server_key_available"] is False
+    assert body["providers"][0]["free_tier"] is False
+    assert "SEM_CHAVE_IA_DADOS_BRUTOS" in body["citizen_mode"]
 
 
 # =============================================================== heuristics
@@ -300,10 +348,43 @@ def test_heuristic_keywords_drop_stopwords():
 
 
 # =============================================================== developer experience (Swagger)
-def test_root_redirects_to_docs(client):
-    response = client.get("/", follow_redirects=False)
-    assert response.status_code in (302, 307)
-    assert response.headers["location"] == "/docs"
+def test_root_serves_citizen_web_app(client):
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    html = response.text
+    assert 'id="checkForm"' in html and 'id="resultPanel"' in html
+    assert "/static/app.js" in html and "/static/styles.css" in html
+
+
+@pytest.mark.parametrize(
+    ("path", "content_type"),
+    [("/static/app.js", "javascript"), ("/static/styles.css", "text/css")],
+)
+def test_web_assets_are_served(client, path, content_type):
+    response = client.get(path)
+    assert response.status_code == 200
+    assert content_type in response.headers["content-type"]
+
+
+def test_web_app_never_injects_api_data_as_html(client):
+    # Source excerpts come from third parties: the page must render them as text only.
+    script = client.get("/static/app.js").text
+    assert "innerHTML" not in script
+    assert "insertAdjacentHTML" not in script
+
+
+def test_source_url_is_audited_and_validated(client):
+    response = client.post(
+        ENDPOINT,
+        json={"claim": "A inflação passou de 10%.", "source_url": "https://boato.example.com/x"},
+    )
+    assert response.status_code == 200
+    assert "web_history" in response.json()["domains"]
+    bad = client.post(
+        ENDPOINT, json={"claim": "A inflação passou de 10%.", "source_url": "ftp://x"}
+    )
+    assert bad.status_code == 422
 
 
 def test_openapi_exposes_byok_headers_as_authorize_schemes(client):
@@ -362,3 +443,19 @@ def test_connector_search_reports_failures(client, upstream):
 def test_connector_search_requires_keywords(client):
     response = client.post("/api/v1/connectors/search", json={"keywords": []})
     assert response.status_code == 422
+
+
+def test_free_providers_listed_first_with_one_click_steps():
+    from app.engines.factory import DEFAULT_REGISTRY
+
+    settings = make_settings()
+    app = create_app(settings)
+    with TestClient(app) as test_client:
+        app.state.provider_factory = ProviderFactory(settings, registry=DEFAULT_REGISTRY)
+        body = test_client.get("/api/v1/byok/providers").json()
+    names = [p["name"] for p in body["providers"]]
+    assert names == ["gemini", "groq", "ollama", "anthropic", "openai"]
+    gemini = body["providers"][0]
+    assert gemini["free_tier"] is True and gemini["requires_credit_card"] is False
+    assert gemini["get_key_url"] == "https://aistudio.google.com/apikey"
+    assert len(gemini["steps"]) == 3

@@ -22,6 +22,12 @@ def make_settings(**overrides: Any) -> Settings:
         "openai_api_key": None,
         "groq_api_key": None,
         "connector_backoff_base_seconds": 0.0,
+        "connector_warm_up": False,  # never download real datasets during tests
+        "reliefweb_appname": None,
+        "transparencia_api_key": None,
+        "piste_client_id": None,
+        "piste_client_secret": None,
+        "ncbi_api_key": None,
     }
     base.update(overrides)
     return Settings(_env_file=None, **base)

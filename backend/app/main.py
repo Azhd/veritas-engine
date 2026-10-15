@@ -6,42 +6,72 @@ Swagger UI:   http://localhost:8000/docs
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
 
 from app.api.v1 import byok, connectors, fact_check
-from app.connectors.registry import build_connectors
+from app.connectors.registry import build_connectors, warm_up
 from app.core.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
 from app.engines.factory import ProviderFactory
 from app.services.fact_checker import FactCheckService
 
+#: Citizen web app (static HTML/CSS/JS, no build step) served at ``/``.
+WEB_DIR = Path(__file__).parent / "web"
+#: Browsers otherwise cache the assets heuristically and keep stale versions after an update;
+#: ``no-cache`` still lets them reuse the file after a cheap ETag check (HTTP 304).
+REVALIDATE_HEADERS = {"Cache-Control": "no-cache"}
+
+
+class RevalidatingStaticFiles(StaticFiles):
+    def file_response(self, *args: Any, **kwargs: Any) -> Response:
+        response = super().file_response(*args, **kwargs)
+        response.headers.update(REVALIDATE_HEADERS)
+        return response
+
+
 API_DESCRIPTION = """
-Verificação de fatos com cruzamento de dados em **fontes oficiais do Brasil e da França**,
-usando a **sua própria chave de IA (BYOK)**. A chave vale só para a requisição e não é armazenada.
+Verificação de fatos em **fontes primárias**: governos do Brasil e da França, leis e
+jurisprudência (Senado, STJ, EUR-Lex), ciência e saúde (PubMed, OMS), geopolítica (GDELT, ONU)
+e memória da web (Internet Archive). **Gratuito e sem cadastro.**
 
 ### Como testar em 3 passos
-1. **Sem chave de IA:** abra `POST /api/v1/connectors/search` → *Try it out* → escolha um
-   exemplo → *Execute*. Você verá os dados oficiais (Câmara, IBGE, data.gouv.fr).
-2. **Configure seu provedor:** clique em **Authorize** 🔒 e preencha `X-Provider`
-   (`gemini`, `anthropic`, `openai`, `groq` ou `ollama`) e `X-API-Key`.
-   Com Ollama local basta `X-Provider = ollama`.
-3. **Cheque uma alegação:** em `POST /api/v1/fact-check/text`, escolha um exemplo e execute.
+1. **Sem chave nenhuma:** abra `POST /api/v1/fact-check/text`, escolha um exemplo e clique em
+   *Execute*. Você recebe as fontes oficiais encontradas (modo cidadão).
+2. **Veredito explicado por IA, de graça:** crie uma chave **gratuita e sem cartão** do
+   [Google Gemini](https://aistudio.google.com/apikey) ou do [Groq](https://console.groq.com/keys),
+   clique em **Authorize** 🔒 e preencha `X-Provider` (`gemini` ou `groq`) e `X-API-Key`.
+   Com Ollama no seu computador basta `X-Provider = ollama`.
+3. **Repita a checagem:** agora a resposta traz veredito, confiança e explicação com citações.
 
-> Chaves gratuitas para testar: Gemini ([aistudio.google.com](https://aistudio.google.com/apikey))
-> e Groq ([console.groq.com](https://console.groq.com/keys)).
+A chave vale só para a requisição e não é armazenada. Se ela falhar ou a cota gratuita acabar,
+a checagem continua com os dados oficiais brutos, sem erro.
 """
 
 OPENAPI_TAGS = [
-    {"name": "fact-check", "description": "Checagem de alegações (requer provedor de IA)."},
-    {"name": "connectors", "description": "Fontes oficiais BR/FR. **Não precisa de chave.**"},
-    {"name": "byok", "description": "Provedores de IA aceitos e headers esperados."},
+    {
+        "name": "fact-check",
+        "description": "Checagem de alegações. **Funciona sem chave**; com IA traz veredito.",
+    },
+    {
+        "name": "connectors",
+        "description": "Fontes primárias consultadas. **Não precisa de chave.**",
+    },
+    {
+        "name": "byok",
+        "description": "Provedores de IA aceitos: gratuitos (Gemini, Groq, Ollama) primeiro.",
+    },
     {"name": "health", "description": "Estado do serviço."},
 ]
 
@@ -80,9 +110,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.fact_check_service = FactCheckService(
             connectors, max_results_per_connector=settings.connector_max_results
         )
+        warm_task = asyncio.create_task(warm_up(connectors)) if settings.connector_warm_up else None
         try:
             yield
         finally:
+            if warm_task is not None and not warm_task.done():
+                warm_task.cancel()
             await http_client.aclose()
 
     app = FastAPI(
@@ -115,8 +148,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return HTMLResponse(html)
 
     @app.get("/", include_in_schema=False)
-    async def root() -> RedirectResponse:
-        return RedirectResponse(url="/docs")
+    async def web_app() -> FileResponse:
+        return FileResponse(
+            WEB_DIR / "index.html", media_type="text/html", headers=REVALIDATE_HEADERS
+        )
+
+    app.mount("/static", RevalidatingStaticFiles(directory=WEB_DIR), name="static")
 
     @app.get("/healthz", tags=["health"], summary="Health check")
     async def healthz() -> dict[str, str]:

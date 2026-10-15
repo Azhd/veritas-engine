@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
 from typing import Annotated
 
 from fastapi import Depends, Request, Security
 from fastapi.security import APIKeyHeader
 
 from app.core.config import Settings
+from app.core.errors import ProviderConfigurationError
 from app.engines.base import BaseLLMProvider
 from app.engines.factory import ProviderFactory
 from app.services.fact_checker import FactCheckService
@@ -53,18 +55,39 @@ def get_fact_check_service(request: Request) -> FactCheckService:
     return request.app.state.fact_check_service
 
 
-async def get_llm_provider(
+@dataclass
+class ProviderSelection:
+    """The request's BYOK provider, or ``None`` (citizen mode) with the reason in ``notes``."""
+
+    provider: BaseLLMProvider | None
+    notes: list[str] = field(default_factory=list)
+
+
+async def get_optional_llm_provider(
     factory: Annotated[ProviderFactory, Depends(get_provider_factory)],
+    settings: Annotated[Settings, Depends(get_app_settings)],
     x_provider: Annotated[str | None, Security(provider_header)] = None,
     x_api_key: Annotated[str | None, Security(api_key_header)] = None,
     x_endpoint_url: Annotated[str | None, Security(endpoint_header)] = None,
     x_model: Annotated[str | None, Security(model_header)] = None,
-) -> AsyncIterator[BaseLLMProvider]:
-    """Create a provider scoped to this request and dispose of it (and the key) afterwards."""
-    provider = factory.create(
-        provider=x_provider, api_key=x_api_key, endpoint_url=x_endpoint_url, model=x_model
-    )
+) -> AsyncIterator[ProviderSelection]:
+    """Create a provider scoped to this request and dispose of it (and the key) afterwards.
+
+    Zero-cost principle: a missing or invalid AI configuration never blocks the citizen; the
+    request continues in raw-official-data mode and the reason is reported in the notes.
+    """
+    nothing_sent = not any(v and v.strip() for v in (x_provider, x_api_key, x_endpoint_url))
+    if nothing_sent and settings.default_provider is None:
+        yield ProviderSelection(None, ["Nenhuma chave de IA informada: modo cidadão ativado."])
+        return
     try:
-        yield provider
+        provider = factory.create(
+            provider=x_provider, api_key=x_api_key, endpoint_url=x_endpoint_url, model=x_model
+        )
+    except ProviderConfigurationError as exc:
+        yield ProviderSelection(None, [f"Configuração de IA não utilizada: {exc.message}"])
+        return
+    try:
+        yield ProviderSelection(provider)
     finally:
         await provider.aclose()

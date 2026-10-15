@@ -1,125 +1,142 @@
-# CLAUDE.md - Diretrizes Técnicas & Guia do Engenheiro (Veritas Engine)
+# CLAUDE.md - Diretrizes Técnicas & Guia do Engenheiro (Veritas Engine Alpha 1.0)
 
-> **Projeto**: Veritas Engine  
+> **Projeto**: Veritas Engine (Alpha 1.0)  
+> **Missão**: Infraestrutura Pública e Universal de Verdade, Contexto Histórico e Perícia Digital  
 > **Papel do Claude Code**: Engenheiro de Software Líder / Executor Técnico  
 > **Papel do Antigravity (Gemini)**: Arquiteto de Sistemas, Tech Lead & Gerente de Produto (PM)  
 > **Comunicação Inter-Agentes**: Orquestrada pelo arquivo `TASK_BOARD.md` na raiz do repositório.
 
 ---
 
-## 1. Visão Geral do Veritas Engine
+## 1. Visão & Manifesto do Veritas Engine Alpha 1.0
 
-O **Veritas Engine** é uma plataforma *open source* de **Fact-Checking Multimodal Descentralizado** de alta precisão. O motor processa afirmações em múltiplos formatos de mídia (Texto, Imagem, Áudio e Vídeo) e realiza cruzamento de dados em tempo real com fontes de autoridade pública (governamentais, estatísticas e legislativas) de múltiplos países, começando por **Brasil** e **França**, operando sob o paradigma **BYOK (Bring Your Own Key)**.
+O **Veritas Engine** não é apenas um checador de fatos político: é uma **infraestrutura pública e universal de verdade, contexto histórico e perícia digital**, projetada para empoderar qualquer cidadão — **estudantes, jornalistas investigativos, famílias e pesquisadores acadêmicos** — contra a desinformação em qualquer área do conhecimento humano:
 
-### Pilares Fundamentais:
-1. **Multimodalidade Extrema**: Verificação de declarações em texto, fotos (análise forense, EXIF e C2PA), áudios (transcrição Whisper + análise de modulação vocal) e vídeos (demuxing de frames, transcrição temporal e análise contextual).
-2. **Conectores Governamentais Nativos**: Integração direta via APIs oficiais e buscas direcionadas a domínios governamentais auditáveis (`gov.br` e `gouv.fr`).
-3. **Privacidade e Descentralização (BYOK)**: Nenhuma chave secreta de IA fica retida centralmente. Usuários conectam suas chaves de provedores de nuvem (Google Gemini, Anthropic Claude, OpenAI, Groq) ou usam modelos locais (Ollama, vLLM).
-4. **Auditabilidade Total (Cadeia de Evidências)**: Cada verificação produz um relatório contendo a trilha de evidências, pontuação de confiança (*confidence score*), links das fontes primárias e metadados criptográficos.
+1. **Geopolítica & Conflitos**: Monitoramento de guerras, tratados internacionais e crises humanitárias.
+2. **Saúde, Biologia & Ciência**: Validação de evidências médicas, artigos científicos, pandemias e ensaios clínicos contra pseudociência.
+3. **Direito & Justiça**: Consulta direta a acórdãos, códigos de lei, súmulas e jurisprudência vinculante.
+4. **Cotidiano & Cidadania**: Estatísticas demográficas, econômicas, inflação, programas sociais e orçamentos públicos.
 
 ---
 
-## 2. Arquitetura de Referência do Sistema
+## 2. Pilares de Engenharia
+
+1. **Multimodalidade Extrema & Perícia Digital**:
+   - Inspeção de **Texto**, **Vídeo** (extração de frames e áudio com `yt-dlp` + `ffmpeg`), **Áudio** (transcrição com timestamps via `Whisper`), **Imagens** (metadados EXIF e validação de proveniência criptográfica **C2PA** via `c2pa-python`).
+2. **Cruzamento em Tempo Real com Fontes Primárias Globais**:
+   - APIs de dados abertos governamentais, bases de pesquisas biomédicas, organismos internacionais e acórdãos judiciais.
+3. **Modos de Audiência Adaptativos (`audience_mode`)**:
+   - O mesmo conjunto de fatos e evidências oficiais é sintetizado sob medida para o público-alvo:
+     - `general_family`: Linguagem simples, direta, didática, sem jargões e pronta para compartilhamento familiar e em redes sociais.
+     - `journalism_student`: Trilha investigativa completa (OSINT), metodologia de checagem, linha do tempo e metadados forenses.
+     - `law_academic`: Foco estrito em jurisprudência, artigos de lei, acórdãos e citações científicas com DOI/PubMed ID.
+4. **Arquitetura BYOK (Bring Your Own Key) & Privacidade Descentralizada**:
+   - Nenhuma chave de IA é retida em banco central. Usuários conectam Google Gemini, Anthropic Claude, OpenAI, Groq ou modelos locais via **Ollama**.
+5. **Acessibilidade Financeira Universal & Custo Zero (Zero-Cost / Free-Tier First)**:
+   - **Princípio da Inclusão Cidadã**: O Veritas Engine foi concebido para ser utilizado por **qualquer cidadão, especialmente os mais desprovidos de recursos, estudantes de escolas públicas e famílias de baixa renda**. Não pode haver exigência de cartões de crédito internacionais, planos pagos ou barreiras financeiras.
+   - **Prioridade Absoluta para IAs Gratuitas**:
+     * **Google Gemini (Free Tier / Google AI Studio)**: Chaves 100% gratuitas geradas em 1 minuto apenas com uma conta Google comum, sem pedir cartão de crédito (modelos Flash).
+     * **Groq Cloud (Free Tier)**: Inferência ultrarrápida gratuita com modelos de código aberto (Llama 3).
+     * **Modelos Locais Offline (Ollama)**: Custo ZERO absoluto de tokens e dados.
+     * **Modo Cidadão Sem IA (Fallback Direto de Dados)**: Se o usuário não tiver nenhuma chave de IA ou estiver com conexão ultra-restrita, o Veritas Engine **não trava**: ele realiza a busca direta nas APIs públicas (Câmara, IBGE, data.gouv.fr, PubMed) e entrega as fontes oficiais brutas e números oficiais diretamente na tela.
+   - **Design Leve & Baixo Consumo**: O backend e a interface devem operar com baixíssimo consumo de memória e banda de internet, viáveis em celulares modestos e redes 3G/4G populares.
+
+---
+
+## 3. Arquitetura de Referência do Monorepo
 
 ```
 veritas-engine/
 ├── backend/
 │   ├── app/
-│   │   ├── api/                # Rotas REST e WebSockets (FastAPI)
+│   │   ├── api/
 │   │   │   └── v1/
-│   │   │       ├── fact_check.py
-│   │   │       ├── connectors.py
-│   │   │       └── byok.py
-│   │   ├── core/               # Configurações globais, segurança, lifespan
-│   │   ├── engines/            # Motores de IA e Provedores BYOK
-│   │   │   ├── provider_factory.py  # Factory unificada (Gemini, Claude, OpenAI, Groq, Ollama)
-│   │   │   └── prompt_templates/    # Prompts de extração de alegações e síntese
-│   │   ├── connectors/         # Conectores de APIs Governamentais
-│   │   │   ├── br/             # Brasil: Camara, Senado, IBGE, Transparência, GovBR Search
-│   │   │   └── fr/             # França: data.gouv.fr, INSEE, Légifrance, GouvFR Search
-│   │   ├── multimodal/         # Processamento de mídia
-│   │   │   ├── c2pa_forensic.py   # Validação de proveniência C2PA / EXIF
-│   │   │   ├── audio_transcriber.py # Whisper / Faster-Whisper
-│   │   │   └── video_processor.py   # FFmpeg frame extraction & timeline alignment
-│   │   └── schemas/            # Schemas Pydantic de entrada, saída e relatórios
-│   ├── tests/                  # Testes unitários e de integração (pytest)
-│   ├── requirements.txt
-│   └── Dockerfile
-├── frontend/                   # Interface Web (Next.js 14+ App Router, Tailwind, shadcn/ui)
-│   ├── src/
-│   │   ├── app/                # Páginas e layout
-│   │   ├── components/         # Upload multimodal, Timeline de checagem, BYOK Dialog
-│   │   └── lib/                # Client HTTP, state management
-│   └── package.json
-├── docs/                       # Documentação técnica e arquitetura
-├── TASK_BOARD.md               # Painel de controle de sprints e handovers Antigravity <-> Claude Code
-└── CLAUDE.md                   # Este arquivo (especificação técnica mestre)
+│   │   │       ├── fact_check.py        # Endpoints REST e streaming de auditoria
+│   │   │       ├── byok.py              # Descoberta de provedores suportados
+│   │   │       └── media.py             # Upload e inspeção forense multimodal
+│   │   ├── core/                        # Configurações globais (pydantic-settings), erros
+│   │   ├── engines/                     # Motores de IA e Provedores BYOK
+│   │   │   ├── base.py                  # BaseLLMProvider & ProviderCredentials
+│   │   │   ├── factory.py               # ProviderFactory dinâmica
+│   │   │   ├── providers/               # Gemini, Claude, OpenAI, Groq, Ollama
+│   │   │   └── verdict_engine.py        # Motor de síntese com adaptação de audiência
+│   │   ├── connectors/                  # Conectores Multidisciplinares de Fontes Primárias
+│   │   │   ├── base.py                  # BaseGovConnector com TTL cache e retries exponenciais
+│   │   │   ├── br_gov.py                # Brasil: Câmara, Senado, IBGE, Transparência, GovBR Search
+│   │   │   ├── fr_gov.py                # França: data.gouv.fr, INSEE, Légifrance, GouvFR Search
+│   │   │   ├── global_geopolitics.py    # ONU (ReliefWeb/UN Data), GDELT Project, conflitos globais
+│   │   │   ├── science_health.py        # PubMed (NCBI API), OMS/WHO (estudos e validações médicas)
+│   │   │   ├── legal_justice.py         # STF, Planalto, EUR-Lex, Cour de Cassation
+│   │   │   └── web_archive.py           # Wayback Machine (Internet Archive API)
+│   │   ├── forensics/                   # Perícia Multimodal
+│   │   │   ├── media_inspector.py       # Orquestrador forense (yt-dlp, ffmpeg, exif, c2pa)
+│   │   │   ├── audio_transcriber.py     # Transcrição com timestamps (Whisper)
+│   │   │   └── c2pa_validator.py        # Validação criptográfica de IA e proveniência
+│   │   └── schemas/                     # Modelos Pydantic v2
+│   │       ├── audience.py              # Enums de modos de audiência
+│   │       ├── evidence.py              # Evidências primárias padronizadas
+│   │       ├── fact_check.py            # Relatório de verificação estruturado
+│   │       └── forensics.py             # Metadados de mídia e laudo pericial
+│   ├── tests/                           # Suíte de testes automatizados (pytest)
+│   ├── Dockerfile                       # Container com Python, FFmpeg, yt-dlp, ExifTool
+│   ├── docker-compose.yml
+│   └── requirements.txt
+├── docs/                                # Especificações de arquitetura e APIs
+├── TASK_BOARD.md                        # Quadro de Sprints e Handover Oficial
+└── CLAUDE.md                            # Este arquivo
 ```
 
 ---
 
-## 3. Especificação dos Componentes Críticos
+## 4. Detalhamento dos Módulos Críticos
 
-### 3.1. Arquitetura BYOK (Bring Your Own Key)
-- As chaves de API nunca devem ser salvas de forma exposta no backend para usuários anônimos.
-- O cliente frontend envia as credenciais via *headers* criptografados ou em sessão segura transitória:
-  - `X-Provider`: `gemini` | `anthropic` | `openai` | `groq` | `ollama`
-  - `X-API-Key`: Chave do provedor (quando aplicável)
-  - `X-Endpoint-URL`: URL personalizada (essencial para servidores Ollama ou compatíveis com OpenAI)
-- O backend deve implementar uma interface `BaseLLMProvider` abstrata com métodos padronizados:
-  - `generate(prompt: str, system: str, temperature: float) -> str`
-  - `generate_stream(...) -> AsyncGenerator[str, None]`
-  - `analyze_multimodal(media_bytes: bytes, mime_type: str, prompt: str) -> FactCheckOutput`
+### 4.1. Conectores Multidisciplinares (`/backend/app/connectors/`)
+Todos os conectores devem herdar de `BaseGovConnector` (ou equivalente compartilhado) com cache TTL, timeout estrito (máximo 8s) e retries com backoff exponencial.
 
-### 3.2. Conectores Governamentais Oficiais
-Cada conector deve implementar caching (TTL configurável) e resiliência com retries automáticos.
-
-#### A. Conectores do Brasil (BR)
-- **Câmara dos Deputados**: API REST v2 (`https://dadosabertos.camara.leg.br/api/v2`) para proposições, discursos, presenças e votações.
-- **Senado Federal**: Dados Abertos (`https://legis.senado.leg.br/dadosabertos/`) para matérias legislativas e relatorias.
-- **IBGE**: APIs de Séries Históricas e Pesquisas (`https://servicodados.ibge.gov.br/api/v1/`).
-- **Portal da Transparência (CGU)**: API de emendas parlamentares, benefícios ao cidadão e contratos federais.
-- **Gov.br Verified Search**: Mecanismo de busca programática restrito a `site:gov.br` para conferência de notas oficiais e portarias.
-
-#### B. Conectores da França (FR)
-- **data.gouv.fr**: API v1 (`https://www.data.gouv.fr/api/1/`) para datasets nacionais e fontes abertas.
-- **INSEE**: API de estatísticas econômicas e populacionais (`https://api.insee.fr/`).
-- **Légifrance (DILA / PISTE)**: Consulta a códigos legais, leis vigentes e decretos oficiais.
-- **Gouv.fr Verified Search**: Mecanismo de busca programática restrito a `site:gouv.fr`.
-
-### 3.3. Pipeline Multimodal e C2PA
-- **C2PA (Coalition for Content Provenance and Authenticity)**: Extração e validação de manifesto de proveniência criptográfica (verificar se a imagem/áudio/vídeo foi gerada por IA ou manipulada pós-captura).
-- **Áudio**: Extração de faixas via FFmpeg e transcrição via Whisper com identificação de *timestamps* e *speakers*.
-- **Vídeo**: Amostragem inteligente de *key-frames* representativos e sincronização com a transcrição textual para verificação frame a frame.
+* **`br_gov.py`**:
+  * Câmara dos Deputados (`dadosabertos.camara.leg.br/api/v2`)
+  * Senado Federal (`legis.senado.leg.br/dadosabertos/`)
+  * IBGE Séries Históricas e Demografia (`servicodados.ibge.gov.br/api/v1`)
+  * Portal da Transparência (CGU)
+* **`fr_gov.py`**:
+  * data.gouv.fr API v1
+  * INSEE Estatísticas e Demografia (`api.insee.fr`)
+  * Légifrance (DILA / PISTE API)
+* **`global_geopolitics.py`**:
+  * **ReliefWeb API (ONU / OCHA)**: Dados de crises humanitárias e relatórios de zonas de guerra.
+  * **GDELT Project API**: Monitoramento mundial de eventos, declarações de líderes e cobertura geopolítica global.
+* **`science_health.py`**:
+  * **PubMed / NCBI E-utilities API**: Verificação de artigos médicos revisados por pares, ensaios clínicos e identificadores PMID/DOI.
+  * **OMS / WHO GHO (Global Health Observatory) API**: Dados estatísticos mundiais de saúde, vacinas e diretrizes oficiais.
+* **`legal_justice.py`**:
+  * Jurisprudência e Legislação: Portal da Legislação do Planalto, repositórios de acórdãos judiciais, EUR-Lex (União Europeia) e jurisprudência comparada.
+* **`web_archive.py`**:
+  * **Wayback Machine Availability API**: Confere histórico de páginas da web, identificando alterações retroativas, notas de retificação ou matérias apagadas.
 
 ---
 
-## 4. Regra de Ouro: Protocolo de Comunicação Antigravity <-> Claude Code
+### 4.2. Forense de Mídia (`/backend/app/forensics/`)
+* **Vídeo**: Download/extração via `yt-dlp` e amostragem de keyframes via `ffmpeg` para análise de manipulação temporal.
+* **Áudio**: Transcrição via `Whisper` gerando blocos textuais alinhados com `start_time` e `end_time` para verificação minuto a minuto.
+* **Imagem & C2PA**:
+  * Leitura e validação de manifestos criptográficos C2PA (`c2pa-python`). Identifica se a imagem foi gerada por ferramentas de IA generativa (DALL-E, Midjourney, Adobe Firefly, etc.) ou se teve assinatura de câmera preservada.
+  * Extração de metadados EXIF com `exiftool` (modelo da câmera, data de captura, geolocalização).
 
-> ⚠️ **ATENÇÃO CLAUDE CODE: NUNCA INICIE UMA NOVA FASE SEM APROVAÇÃO FORMAL DO ANTIGRAVITY.**
+---
 
-1. **Leitura Contínua**: Sempre leia o `TASK_BOARD.md` antes de agir para saber sua atribuição atual.
-2. **Execução Autônoma e Rigorosa**: Ao trabalhar em uma tarefa:
-   - Escreva código modular, tipado (TypeScript no frontend, Type Hints estritos no Python backend com Pydantic v2).
-   - Crie testes automatizados para toda lógica de negócio e conectores.
-   - Trate erros de rede, limites de taxa (rate limits) e ausência de chaves com elegância.
-3. **Protocolo de Entrega (Handover)**:
-   - Assim que você concluir a implementação e validar os testes locais de uma tarefa/fase:
-     1. Edite o arquivo `TASK_BOARD.md`.
-     2. Mude o status da respectiva tarefa/fase para:
-        ```markdown
-        Status: PRONTO PARA REVISÃO DO ANTIGRAVITY
-        ```
-     3. Adicione uma seção **"Notas de Entrega do Claude Code"** no `TASK_BOARD.md` detalhando:
-        - O que foi construído (arquivos criados/modificados).
-        - Testes executados e comandos para reproduzi-los.
-        - Pontos de atenção ou decisões arquiteturais tomadas.
-4. **Auditoria do Antigravity**: O Antigravity (Gemini) irá auditar o código entregue, rodar validações e preparar o ambiente de testes locais.
-5. **Apresentação e Teste Local**: Uma vez que o código esteja auditado e pronto para o usuário, o status em `TASK_BOARD.md` muda para:
-   ```markdown
-   Status: AGUARDANDO VALIDAÇÃO DO USUÁRIO
-   ```
-   O agente ativo (Antigravity ou Claude Code) deve iniciar o servidor local de testes e apresentar na tela as instruções detalhadas de como o usuário pode testar a funcionalidade (endpoints, Swagger `/docs`, exemplos com cURL/payloads).
+### 4.3. Modos de Audiência Adaptativos (`audience_mode`)
+A síntese do `verdict_engine.py` ajusta dinamicamente a estrutura de comunicação:
+
+1. **`general_family`**:
+   - Linguagem empática, direta e de fácil assimilação.
+   - Parágrafos curtos, analogias práticas e destaque para *"Por que isso é falso/verdadeiro em 1 minuto"*.
+   - Cartão de resumo ideal para WhatsApp e redes sociais.
+2. **`journalism_student`**:
+   - Metodologia OSINT (Open Source Intelligence).
+   - Linha do tempo dos acontecimentos, contradições entre fontes, metadados das postagens e histórico de republicações.
+3. **`law_academic`**:
+   - Linguagem técnico-jurídica ou científica.
+   - Indicação precisa de artigos constitucionais, leis vigentes, acórdãos e referências científicas formais (estilo ABNT / APA com DOI e PubMed ID).
 
 ---
 
@@ -128,36 +145,22 @@ Cada conector deve implementar caching (TTL configurável) e resiliência com re
 > 🚨 **REGRA ABSOLUTA DE CONTROLE DE CÓDIGO E PUBLICAÇÃO**
 
 ### 5.1. Fluxo de Validação Obrigatório
-- **Proibição de Push Precoce**: É **TERMINANTEMENTE PROIBIDO** executar `git push` para o GitHub de forma automática antes da aprovação explícita e inequívoca do usuário.
+- **Proibição de Push Precoce**: É **TERMINANTEMENTE PROIBIDO** executar `git push` para o GitHub de forma automática antes da aprovação explícita e inequívoca do usuário no chat.
 - **Commits Locais**: Durante o desenvolvimento e enquanto o usuário testa localmente, é permitido realizar commits locais de segurança (`git commit`) para manter o histórico de alterações rastreável.
-- **Transição de Status**: Nenhuma funcionalidade ou fase avança para publicação remota sem transitar pelo status `AGUARDANDO VALIDAÇÃO DO USUÁRIO` com o servidor de teste ativo e instruções demonstradas na tela.
+- **Transição de Status**: Nenhuma funcionalidade ou fase avança para publicação remota sem transitar pelo status `AGUARDANDO VALIDAÇÃO DO USUÁRIO` com instruções demonstradas na tela.
 
 ### 5.2. Gatilho Automático de Commit & Push
-Assim que o usuário responder no chat com **"Validado"**, **"Aprovado"**, **"Pode subir"** (ou termos equivalentes de aprovação explícita), o agente ativo deve executar **imediatamente e de forma automatizada** os seguintes passos:
-
-1. **Varredura de Segurança & Segredos**:
-   - Verificar se há segredos, senhas ou chaves de API expostas no código.
-   - Garantir obrigatoriamente que arquivos `.env` e credenciais locais estejam listados no `.gitignore` e não estejam indexados no Git (`git status`).
-2. **Git Add & Commit Convencional**:
-   - Executar `git add .`.
-   - Criar o commit semântico seguindo rigorosamente o padrão *Conventional Commits* (ex: `feat: implement br_gov transparency API connector`, `feat: setup byok provider factory and fastapi core`).
-3. **Git Push Remoto**:
-   - Executar `git push` para a branch atual no GitHub (configurando o remote `origin` se for o primeiro envio).
-4. **Atualização do Task Board**:
-   - Atualizar o `TASK_BOARD.md` marcando a respectiva funcionalidade/fase com o status:
-     ```markdown
-     Status: PUBLICADA NO GITHUB
-     ```
+Assim que o usuário responder no chat com **"Validado"**, **"Aprovado"** ou **"Pode subir"**, o agente ativo deve executar **imediatamente e de forma automatizada**:
+1. **Varredura de Segredos**: Garantir que `.env` está explicitamente no `.gitignore` e nenhuma credencial está nos arquivos indexados.
+2. **Commit Semântico**: Executar `git add .` e `git commit` seguindo rigorosamente o padrão *Conventional Commits*.
+3. **Git Push Remoto**: Executar `git push` para a branch `main` no GitHub.
+4. **Atualização do Task Board**: Atualizar o `TASK_BOARD.md` marcando a etapa como `PUBLICADA NO GITHUB`.
 
 ---
 
 ## 6. Padrões de Código e Boas Práticas
 
 - **Linguagem Backend**: Python 3.11+.
-  - Gerenciador de dependências: `pip` / `requirements.txt` (ou Poetry / uv se preferir, manter simples).
-  - Linter/Formatter: Ruff ou Black + Flake8.
-- **Linguagem Frontend**: TypeScript, React 18+, Next.js 14+ (App Router).
-- **Padrão de Nomenclatura**:
-  - Python: `snake_case` para funções/variáveis, `PascalCase` para classes, `SCREAMING_SNAKE_CASE` para constantes.
-  - TypeScript: `camelCase` para funções/variáveis, `PascalCase` para componentes e interfaces.
-- **Commits Git**: Padrão Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`).
+- **Tipagem**: Type Hints estritos e validação estrutural com **Pydantic v2**.
+- **Resiliência**: Tratamento de exceções com fallback gracioso — a falha em um conector externo nunca deve derrubar o pipeline geral de checagem.
+- **Testes**: Cobertura com `pytest` e fixtures sem chamadas desnecessárias à rede externa em ambiente de CI.

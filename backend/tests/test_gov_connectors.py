@@ -6,9 +6,8 @@ import httpx
 import pytest
 
 from app.connectors.base import TTLCache
-from app.connectors.br.camara_connector import CamaraConnector
-from app.connectors.br.ibge_connector import IbgeConnector, format_period
-from app.connectors.fr.data_gouv_connector import DataGouvConnector
+from app.connectors.br_gov import CamaraConnector, IbgeConnector, format_period
+from app.connectors.fr_gov import DataGouvConnector
 from app.connectors.registry import build_connectors
 from app.core.errors import ConnectorHTTPError, ConnectorUnavailableError
 from app.schemas.evidence import Country, EvidenceQuery
@@ -368,8 +367,33 @@ async def test_registry_shares_client_and_cache():
     settings = make_settings(connector_timeout_seconds=5, connector_max_retries=1)
     connectors, client = build_connectors(settings)
     try:
-        assert {c.source_id for c in connectors} == {"br.camara", "br.ibge", "fr.data_gouv"}
+        ids = [c.source_id for c in connectors]
+        assert len(ids) == len(set(ids)) == 18
+        assert {"br.camara", "br.senado", "br.ibge", "fr.data_gouv", "fr.insee"} <= set(ids)
         assert len({id(c.cache) for c in connectors}) == 1
-        assert all(c.timeout_seconds == 5 and c.max_retries == 1 for c in connectors)
+        assert all(c.timeout_seconds == 5 for c in connectors)
+        retries = {c.source_id: c.max_retries for c in connectors}
+        assert retries.pop("geo.gdelt") == 0  # GDELT policy: 1 request / 5 s, never retried
+        assert set(retries.values()) == {1}
+        disabled = {c.source_id for c in connectors if not c.enabled}
+        # Only sources that need credentials are disabled by default (zero-cost first).
+        assert disabled == {"br.transparencia", "fr.legifrance", "fr.judilibre", "geo.reliefweb"}
+    finally:
+        await client.aclose()
+
+
+async def test_registry_enables_credentialed_sources_when_configured():
+    settings = make_settings(
+        reliefweb_appname="veritas-approved",
+        transparencia_api_key="cgu-key",
+        piste_client_id="id",
+        piste_client_secret="secret",
+    )
+    connectors, client = build_connectors(settings)
+    try:
+        assert all(c.enabled for c in connectors)
+        legifrance = next(c for c in connectors if c.source_id == "fr.legifrance")
+        judilibre = next(c for c in connectors if c.source_id == "fr.judilibre")
+        assert legifrance._auth is judilibre._auth  # one shared PISTE token cache
     finally:
         await client.aclose()

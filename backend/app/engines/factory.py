@@ -25,12 +25,13 @@ from app.engines.providers.groq_provider import GroqProvider
 from app.engines.providers.ollama_provider import OllamaProvider
 from app.engines.providers.openai_provider import OpenAIProvider
 
+#: Zero-cost first: free tiers (Gemini, Groq) and local models (Ollama) come before paid APIs.
 DEFAULT_REGISTRY: Mapping[ProviderName, type[BaseLLMProvider]] = {
     ProviderName.GEMINI: GeminiProvider,
-    ProviderName.ANTHROPIC: ClaudeProvider,
-    ProviderName.OPENAI: OpenAIProvider,
     ProviderName.GROQ: GroqProvider,
     ProviderName.OLLAMA: OllamaProvider,
+    ProviderName.ANTHROPIC: ClaudeProvider,
+    ProviderName.OPENAI: OpenAIProvider,
 }
 
 _PROVIDER_ALIASES = {"claude": ProviderName.ANTHROPIC, "google": ProviderName.GEMINI}

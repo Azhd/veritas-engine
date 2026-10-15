@@ -59,7 +59,11 @@ class OllamaProvider(BaseLLMProvider):
         except httpx.HTTPError:
             raise ProviderUnavailableError("ollama: could not connect to the endpoint.") from None
         if response.status_code >= 400:
-            raise map_status_code(response.status_code, self.name.value)
+            try:
+                body = response.json()
+            except ValueError:
+                body = None
+            raise map_status_code(response.status_code, self.name.value, body)
         try:
             return response.json()["message"]["content"]
         except (ValueError, KeyError, TypeError):

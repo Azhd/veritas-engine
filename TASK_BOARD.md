@@ -1,4 +1,4 @@
-# TASK_BOARD.md - Painel de Controle e Handover (Veritas Engine)
+# TASK_BOARD.md - Painel de Controle e Handover (Veritas Engine Alpha 1.0)
 
 > **Mecanismo de Coordenação**:
 > - **Antigravity (Gemini)**: Arquiteto & Product Manager (define requisitos, audita entregas, inicia testes para o usuário e coordena publicações).
@@ -13,109 +13,184 @@
 
 1. **FLUXO DE VALIDAÇÃO OBRIGATÓRIO**:
    - Sempre que uma funcionalidade ou fase for concluída pelo Claude Code e auditada, o status deve obrigatoriamente transitar para `AGUARDANDO VALIDAÇÃO DO USUÁRIO`.
-   - O agente ativo (Antigravity ou Claude Code) deve **iniciar o servidor local de testes** e apresentar na tela o passo a passo exato para o usuário testar (endpoints Swagger `/docs`, cURL de exemplo, interface web).
+   - O agente ativo deve iniciar o servidor local de testes e demonstrar na tela como o usuário pode validar.
    - **É TERMINANTEMENTE PROIBIDO executar `git push` automático antes da aprovação explícita do usuário no chat.**
 
 2. **GATILHO AUTOMÁTICO DE COMMIT & PUSH**:
    - Enquanto o usuário testa, são permitidos commits locais de segurança (`git commit`).
-   - Assim que o usuário enviar no chat **"Validado"**, **"Aprovado"** ou **"Pode subir"**, o agente ativo deve **automaticamente e sem hesitação**:
-     1. **Verificar segredos**: Garantir que `.env` está explicitamente no `.gitignore` e nenhuma chave de API ou credencial está nos arquivos indexados.
-     2. **Commit semântico**: Executar `git add .` e `git commit` seguindo o padrão *Conventional Commits* (ex: `feat: implement web playground and byok modal`).
-     3. **Push remoto**: Executar `git push` para o GitHub na branch `main`.
-     4. **Atualizar status**: Marcar a fase/tarefa no `TASK_BOARD.md` como `PUBLICADA NO GITHUB`.
+   - Assim que o usuário enviar no chat **"Validado"**, **"Aprovado"** ou **"Pode subir"**, o agente ativo deve:
+     1. **Verificar segredos**: Garantir que `.env` está no `.gitignore` e nenhuma credencial está nos arquivos indexados.
+     2. **Commit semântico**: Executar `git add .` e `git commit` no padrão *Conventional Commits*.
+     3. **Push remoto**: Executar `git push` para a branch `main` no GitHub.
+     4. **Atualizar status**: Marcar a fase no `TASK_BOARD.md` como `PUBLICADA NO GITHUB`.
 
 ---
 
-## 🚦 Visão Geral das Fases
+## 🕊️ Princípio Inegociável: Acessibilidade Universal & Custo Zero (Zero-Cost First)
+
+> **"O Veritas Engine deve servir a qualquer cidadão, do estudante de escola pública à família mais humilde."**
+> - **Prioridade para IAs 100% Gratuitas**: Suporte de primeira classe para **Google Gemini Free Tier** (grátis com conta Google comum, sem pedir cartão de crédito), **Groq Free Tier** e **Ollama Local** (custo zero de internet/tokens).
+> - **Modo Cidadão Sem Chave (Fallback Direto)**: A consulta a dados abertos e evidências primárias de saúde, leis e estatísticas públicas deve funcionar mesmo que o usuário não possua nenhuma chave de IA, entregando os links e números oficiais brutos sem barreiras financeiras.
+> - **Pegada Ultraleve**: Baixo consumo de memória e otimização para operar fluidamente em redes 3G/4G e dispositivos modestos.
+
+---
+
+## 🚦 Roadmap Oficial da Versão Alpha 1.0
 
 | Fase | Descrição | Status Atual | Responsável |
 | :--- | :--- | :--- | :--- |
-| **Fase 1** | **Fundação do Veritas Engine: Arquitetura Core, Motor BYOK & Conectores Base (BR/FR)** | `PUBLICADA NO GITHUB` | Claude Code |
-| **Fase 2** | **Interface Web Reativa & Playground BYOK Integrado (UI/UX)** | `EM PROGRESSO` | Claude Code |
-| **Fase 3** | Pipeline Multimodal Avançado (C2PA, Forense de Imagem, Whisper para Áudio/Vídeo) | `BACKLOG` | Claude Code |
-| **Fase 4** | Conectores Governamentais Avançados (Senado, Transparência/CGU, INSEE, Légifrance) | `BACKLOG` | Claude Code |
-| **Fase 5** | Hardening, Auditoria Criptográfica de Evidências, Dockerização & Release Open Source | `BACKLOG` | Claude Code & Antigravity |
+| **Fase 1** | **Fundação & Core:** Estrutura FastAPI, Router BYOK multi-provedor (Gemini, Claude, OpenAI, Groq, Ollama) | `PUBLICADA NO GITHUB` | Claude Code |
+| **Fase 2** | **Conectores de Fontes Primárias & App do Cidadão:** Módulos multidisciplinares assíncronos (`br_gov`, `fr_gov`, `science_health`, `legal_justice`, `global_geopolitics`, `climate_environment`, `web_archive`) + Modo Custo Zero + App Web (`app/web/`) | `PUBLICADA NO GITHUB` (Alpha 1.2, `v1.2.0-alpha`) | Claude Code |
+| **Fase 3** | **Pipeline Multimodal & Forense Digital:** Extração de mídia (`yt-dlp` + FFmpeg), transcrição temporal (Whisper), validação C2PA/EXIF e Dockerização | `EM PROGRESSO` | Claude Code |
+| **Fase 4** | **Motor de Contexto e Adaptação de Audiência:** `verdict_engine.py` com relatórios em três modos (`general_family`, `journalism_student`, `law_academic`) | `BACKLOG` | Claude Code |
+| **Fase 5** | **Testes Alfa e Consolidação de Release:** Suíte completa de testes E2E, documentação e empacotamento da release Alpha 1.0 | `BACKLOG` | Claude Code |
 
 ---
 
-## 🎯 FASE 2: Interface Web Reativa & Playground BYOK Integrado (UI/UX)
+## 🎯 FASE 2: Conectores de Fontes Primárias Multidisciplinares
+
+**Status da Fase**: `PUBLICADA NO GITHUB` (Alpha 1.2, tag `v1.2.0-alpha`, mesclada em `main`)  
+**Responsável**: Claude Code (Engenheiro Executor)  
+**Meta**: Expandir o Veritas Engine para além do factual político básico, dotando o sistema de conectores assíncronos e resilientes para checagem em Saúde/Ciência, Geopolítica Global, Direito/Justiça, Clima/Ambiente, Governos (BR/FR), Histórico da Web e App do Cidadão acessível a custo zero.
+
+---
+
+### [TASK 2.1] Conector de Saúde e Ciência (`science_health.py`)
+- [x] Criar módulo `backend/app/connectors/science_health.py`:
+  - **PubMed / NCBI E-utilities**:
+    - Busca de artigos científicos por termos-chave e autores (`esearch.fcgi`).
+    - Obtenção de resumos e metadados com DOI e PMID (`esummary.fcgi` / `efetch.fcgi`).
+  - **OMS / WHO GHO (Global Health Observatory)**:
+    - Consulta a indicadores de saúde globais e diretrizes oficiais.
+  - Implementar mapeamento para o modelo unificado de `Evidence` (com título, autores, revista, ano, DOI, link oficial e snippet).
+- [x] Testes unitários com mocks em `backend/tests/test_science_health_connector.py`.
+
+---
+
+### [TASK 2.2] Conector de Geopolítica e Conflitos Globais (`global_geopolitics.py`)
+- [x] Criar módulo `backend/app/connectors/global_geopolitics.py`:
+  - **ReliefWeb API (ONU / OCHA)**:
+    - Consulta a relatórios de crises humanitárias, desastres e zonas de conflito (`api.reliefweb.int/v1/reports`).
+  - **GDELT Project API**:
+    - Monitoramento de notícias globais, eventos internacionais e declarações de líderes mundiais via GDELT Doc 2.0 API.
+  - Formatação padronizada das evidências geopolíticas com data do evento e link oficial do relatório.
+- [x] Testes unitários com mocks em `backend/tests/test_geopolitics_connector.py`.
+
+---
+
+### [TASK 2.3] Conector Jurídico e Legislação (`legal_justice.py`)
+- [x] Criar módulo `backend/app/connectors/legal_justice.py`:
+  - **Legislação Brasileira**:
+    - Consulta a leis, decretos federais e portarias vigentes (Portal da Legislação / Planalto).
+    - Módulo de consulta a súmulas e teses de repercussão geral (STF / STJ).
+  - **Legislação Internacional**:
+    - Consulta a normas da União Europeia (EUR-Lex API) e decisões judiciais francesas (Cour de Cassation via PISTE/Légifrance).
+  - Retorno de referências estruturadas com número de lei, artigo e ementa oficial.
+- [x] Testes unitários com mocks em `backend/tests/test_legal_connector.py`.
+
+---
+
+### [TASK 2.4] Conector de Memória da Web (`web_archive.py`)
+- [x] Criar módulo `backend/app/connectors/web_archive.py`:
+  - **Wayback Machine Availability API** (`archive.org/wayback/available`):
+    - Verificar snapshots históricos de uma URL suspeita.
+    - Identificar se uma notícia foi alterada, se o título mudou ou se a página foi apagada após a publicação.
+  - Retorno de evidência com data do snapshot original e link do arquivo no Internet Archive.
+- [x] Testes unitários com mocks em `backend/tests/test_web_archive_connector.py`.
+
+---
+
+### [TASK 2.5] Consolidação e Refatoração dos Conectores Governamentais (`br_gov.py` & `fr_gov.py`)
+- [x] Unificar os conectores existentes do Brasil em `backend/app/connectors/br_gov.py` (Câmara, Senado, IBGE e Portal da Transparência / gov.br).
+- [x] Unificar os conectores existentes da França em `backend/app/connectors/fr_gov.py` (data.gouv.fr, INSEE, Légifrance / gouv.fr).
+- [x] Atualizar o registro unificado em `backend/app/connectors/registry.py` para instanciar todos os conectores multidisciplinares com cliente HTTP compartilhado e cache TTL.
+- [x] Garantir que 100% dos testes existentes continuem passando.
+
+---
+
+### [TASK 2.6] Modo Cidadão Acessível & Consulta Sem Chave (Zero-Cost Direct Fallback)
+- [x] Implementar fallback gracioso quando o usuário não fornecer nenhuma chave de IA:
+  - Não bloquear o usuário com erro impeditivo (HTTP 400).
+  - Executar a busca direta de palavras-chave nos conectores de dados abertos (Câmara, IBGE, data.gouv.fr, PubMed, Planalto).
+  - Retornar o relatório com status `SEM_CHAVE_IA_DADOS_BRUTOS` exibindo as evidências e links governamentais oficiais encontrados diretamente para a leitura do cidadão.
+- [x] Garantir que o Google Gemini Free Tier e Groq Free Tier tenham tratamento prioritário e instruções de 1 clique sem requisição de cartão de crédito.
+
+---
+
+### [TASK 2.7] Submissão para Auditoria do Antigravity
+- [x] Executar a suíte de testes com `pytest backend/tests -v`.
+- [x] Atualizar o status da Fase 2 para `PRONTO PARA REVISÃO DO ANTIGRAVITY`.
+- [x] Preencher as **Notas de Entrega do Claude Code (Fase 2)** no bloco abaixo.
+
+---
+
+## 🎯 FASE 3: Pipeline Multimodal & Forense Digital
 
 **Status da Fase**: `EM PROGRESSO`  
 **Responsável**: Claude Code (Engenheiro Executor)  
-**Meta**: Eliminar a dependência do Swagger para testes humanos, entregando uma interface web limpa, moderna, em tema escuro, servida diretamente pelo backend FastAPI em `http://127.0.0.1:8000/`. A interface deve guiar o usuário com links diretos para obter as chaves de cada provedor, oferecer campo espaçoso de texto com exemplos em 1 clique e exibir o veredito com links diretos para os portais oficiais (`.gov.br` e `.gouv.fr`).
+**Meta**: Dotar o Veritas Engine da capacidade de ingerir e periciar mídias complexas (vídeos, áudios e imagens/fotos) e URLs externas (YouTube, TikTok, X, etc.), realizando extração de áudio/frames, transcrição temporal alinhada (Whisper), perícia EXIF e validação de proveniência criptográfica (C2PA) para detecção de IA.
 
 ---
 
-### [TASK 2.1] Arquitetura de UI e Assets Estáticos no Backend
-- [ ] Configurar montagem de diretório de arquivos estáticos em `backend/app/main.py`:
-  - `static_dir = Path(__file__).resolve().parent / "static"`
-  - Montar `/static` via `StaticFiles(directory=static_dir)` (se existir).
-  - Criar rota raiz `GET /` que retorna `FileResponse(static_dir / "index.html")`.
-- [ ] Criar o arquivo `backend/app/static/index.html` com layout SPA moderno:
-  - Estilização via Tailwind CSS (CDN) com tema dark (`slate-950`, `slate-900`, `slate-800`).
-  - Tipografia limpa (Inter/System Font) e ícones inline limpos ou Lucide.
-  - Header com logotipo do Veritas Engine, badge de versão (`v0.1.0`), link para Swagger `/docs` e botão de status de conexão BYOK.
+### [TASK 3.1] Ambiente de Execução & Containerização (FFmpeg, ExifTool, Docker)
+- [ ] Criar `backend/Dockerfile` multi-stage:
+  - Base Python 3.11+ slim.
+  - Instalação das ferramentas de sistema: `ffmpeg`, `exiftool`, `libmagic`.
+  - Instalação de dependências Python (`requirements.txt` + `yt-dlp`, `c2pa-python`).
+- [ ] Criar `docker-compose.yml` na raiz com o backend e volume temporário de mídia.
+- [ ] Adicionar helper no backend checando a disponibilidade de `ffmpeg` e `exiftool` no SO com logs claros e graceful degradation caso ausentes em ambiente Windows/bare-metal.
 
 ---
 
-### [TASK 2.2] Modal Inteligente BYOK com Links Diretos de Conexão
-- [ ] Criar modal ou drawer responsivo acessível pelo botão **"🔑 Conectar Minha Chave"** no topo.
-- [ ] Seletor de Provedor com cartões visuais para:
-  - **Google Gemini** (Recomendado / Grátis)
-  - **Groq** (Llama 3.3 / Rápido)
-  - **OpenAI** (GPT-4o)
-  - **Anthropic Claude** (Claude Sonnet)
-  - **Ollama** (Modelo Local offline)
-- [ ] **Links oficiais diretos e instruções claras para cada provedor**:
-  - Gemini: link direto para `https://aistudio.google.com/app/apikey` com texto: *"Obter chave gratuita no Google AI Studio"*.
-  - Groq: link direto para `https://console.groq.com/keys` com texto: *"Obter chave no Groq Cloud"*.
-  - OpenAI: link direto para `https://platform.openai.com/api-keys`.
-  - Anthropic: link direto para `https://console.anthropic.com/settings/keys`.
-  - Ollama: link direto para `https://ollama.com/download` com instrução do comando de terminal `ollama run llama3.1`.
-- [ ] Input para a chave de API (com toggle de visualização/máscara de senha).
-- [ ] Input para endpoint customizado (visível quando Ollama estiver selecionado, default `http://localhost:11434`).
-- [ ] Persistência segura e estritamente local em `localStorage` do navegador (`veritas_provider`, `veritas_api_key`, `veritas_endpoint_url`).
-- [ ] Indicador visual no cabeçalho: se a chave estiver configurada, badge verde com o nome do provedor ativo (ex: `GEMINI ATIVO` 🟢); se não, badge âmbar pulsante (`CONFIGURAR CHAVE` 🟡).
+### [TASK 3.2] Orquestrador Forense de Mídia (`forensics/media_inspector.py`)
+- [ ] Criar módulo `backend/app/forensics/media_inspector.py`:
+  - Ingestão de upload de arquivo (`UploadFile`) ou download seguro via `yt-dlp` de URL externa (com limite de duração e tamanho máx de 50 MB).
+  - Extração da faixa de áudio em WAV mono 16kHz via FFmpeg.
+  - Amostragem inteligente de keyframes (quadros representativos) via FFmpeg.
+  - Extração e sanitização de metadados EXIF com `exiftool` (data, câmera, geolocalização se presente, software de edição).
+- [ ] Retornar modelo Pydantic `MediaForensicsReport`.
 
 ---
 
-### [TASK 2.3] Formulário de Checagem & Exemplos Rápidos em 1 Clique
-- [ ] Seletor de país/contexto oficial com botões visíveis:
-  - `🇧🇷 Brasil` (Câmara + IBGE)
-  - `🇫🇷 França` (data.gouv.fr)
-  - `🌐 Ambos / Automático`
-- [ ] Textarea ampla, limpa e responsiva para colar notícias, boatos ou declarações.
-- [ ] Bloco de **Exemplos Rápidos em 1 Clique** (ao clicar, preenche automaticamente o texto e o país no formulário):
-  - *🇧🇷 Censo e População (IBGE)*: `"O IBGE divulgou dados sobre a população do Brasil."`
-  - *🏛️ Proposição na Câmara*: `"A Câmara dos Deputados aprovou a taxação de compras internacionais."`
-  - *🇫🇷 Données Officielles (France)*: `"L'INSEE et data.gouv.fr ont publié les données officielles du chômage."`
-- [ ] Botão de envio destacado: **"🔍 Verificar com Fontes Oficiais"**.
-- [ ] Animação de carregamento (Live Feedback) com indicadores dos conectores consultados em tempo real (Câmara, IBGE, data.gouv.fr).
+### [TASK 3.3] Validador de Proveniência Criptográfica C2PA (`forensics/c2pa_validator.py`)
+- [ ] Criar módulo `backend/app/forensics/c2pa_validator.py`:
+  - Inspeção do manifesto JUMBF de proveniência em imagens (JPEG, PNG, WebP) e vídeos.
+  - Integração via `c2pa-python` (ou fallback via subprocess `c2patool`).
+  - Identificação de geradores de IA (DALL-E, Midjourney, Adobe Firefly, etc.) e assinaturas de captura original.
+- [ ] Retorno integrado no laudo pericial da mídia.
 
 ---
 
-### [TASK 2.4] Painel de Resultados: Veredito, Confiança e Fontes Clicáveis
-- [ ] Card de Veredito com design semântico e contrastante:
-  - `🟢 VERDADEIRO` (verde esmeralda)
-  - `🔴 FALSO` (vermelho rosa)
-  - `🟡 ENGANOSO` (âmbar dourado)
-  - `⚪ INCONCLUSIVO / SEM DADOS` (cinza ardósia)
-- [ ] Barra visual de confiança com porcentagem calculada (ex: `92% de confiança`).
-- [ ] Seção da citação da afirmação auditada.
-- [ ] Seção de **Parecer Técnico Oficial** exibindo a síntese gerada pela IA ancorada nas evidências.
-- [ ] Seção de **Fontes Primárias Oficiais Consultadas**:
-  - Card individual para cada fonte encontrada retornada pela API.
-  - Exibição de: Órgão/Publicador (`publisher`), Título do documento (`title`), resumo do registro oficial (`snippet`).
-  - Botão com link externo direto: **"Abrir Fonte Oficial ↗"** (`target="_blank"` com `rel="noopener noreferrer"`) para os portais oficiais (`.gov.br` ou `.gouv.fr`).
-- [ ] Tratamento elegante de erros (ex: chave inválida, erro de conexão, 401, 429) com botão "Configurar Chave" para correção imediata.
+### [TASK 3.4] Transcrição Temporal com Timestamps (`forensics/audio_transcriber.py`)
+- [ ] Criar módulo `backend/app/forensics/audio_transcriber.py`:
+  - Transcrição com alinhamento temporal (`start_time`, `end_time`, `text`) gerando blocos cronológicos.
+  - Suporte a 3 motores (Free-Tier first):
+    1. Whisper Local via `faster-whisper` / `whisper` (offline, custo zero).
+    2. Provedores BYOK com suporte a áudio multimodal (Gemini ou OpenAI Whisper API).
+    3. Fallback gracioso se nenhum motor de áudio estiver configurado.
+  - Identificação de afirmações com marcação de minutagem (ex: *"Aos 01:23 do vídeo: ..."*).
 
 ---
 
-### [TASK 2.5] Testes Automatizados e Handover
-- [ ] Adicionar teste unitário/integração em `backend/tests/test_fact_check_api.py` verificando que a rota `GET /` retorna 200 e serve o arquivo HTML.
-- [ ] Executar a suíte de testes com `pytest backend/tests -v` e garantir 100% de aprovação (todos os 92 testes anteriores + novo teste da UI).
-- [ ] Atualizar o status da Fase 2 para `PRONTO PARA REVISÃO DO ANTIGRAVITY`.
-- [ ] Preencher as **Notas de Entrega do Claude Code** no bloco abaixo com os comandos e evidências.
+### [TASK 3.5] Endpoints REST de Mídia & Integração com o App do Cidadão
+- [ ] Criar rota `POST /api/v1/fact-check/media` em `backend/app/api/v1/fact_check.py`:
+  - Aceita `multipart/form-data` com arquivo de mídia ou URL externa.
+  - Roda perícia forense (EXIF, C2PA), transcrição e despacha afirmações para o motor de checagem.
+- [ ] Atualizar o App do Cidadão (`backend/app/web/`):
+  - Drag & drop para vídeos e áudios, e campo para colar URL de vídeo.
+  - Visualização da timeline com vereditos por trecho do vídeo/áudio.
+
+---
+
+### [TASK 3.6] Testes Automatizados Forenses & Handover
+- [ ] Criar testes unitários com mocks em `backend/tests/test_media_forensics.py`:
+  - Teste de metadados EXIF sintéticos.
+  - Teste de manifesto C2PA com fixture assinado/não assinado.
+  - Teste de transcrição e segmentação temporal.
+  - Teste da rota `POST /api/v1/fact-check/media`.
+- [ ] Garantir 100% de aprovação na suíte de testes (`pytest backend/tests -v`).
+- [ ] Atualizar a documentação (pedido do usuário, vale para todas as fases): `README.md` da raiz (como iniciar, o que o app faz, tabela de fases e versões) e `backend/README.md` (rotas, fontes, configuração, estrutura).
+- [ ] Atualizar status para `PRONTO PARA REVISÃO DO ANTIGRAVITY`.
 
 ---
 
@@ -123,43 +198,113 @@
 
 ### 1. Parecer de Auditoria da Fase 1 (Antigravity - Gemini)
 
-- **Status da Auditoria**: `APROVADO & PUBLICADO`
+- **Status da Auditoria**: `APROVADO & PUBLICADO NO GITHUB`
 - **Data da Avaliação**: 2026-10-14
 - **Avaliação de Arquitetura**:
-  - Excelente estruturação modular: isolamento limpo entre adaptadores BYOK (`engines/providers/`), conectores com resiliência (`connectors/base.py`) e pipeline de checagem (`services/fact_checker.py`).
-  - Suíte de testes automatizados impecável: 92 testes unitários e de integração passando em 3.5s sem chamadas externas não mockadas.
-  - Implementação do cache TTL/LRU e backoff exponencial garantem conformidade com as regras de uso de APIs governamentais abertas.
-- **Conformidade de Segurança e BYOK**:
-  - Chaves de API gerenciadas via `SecretStr`, sem vazamento em logs ou responses.
-  - Dependência transitória no FastAPI com descarte no `aclose()`.
-- **Decisão**: `FASE 1 HOMOLOGADA. LIBERADA FASE 2 (UI/UX PLAYGROUND) PARA O CLAUDE CODE.`
+  - Fundação do Veritas Engine implementada com excelente rigor técnico e modularidade.
+  - Motor BYOK operando com isolamento estrito de chaves por requisição.
+  - Conectores governamentais base testados com 92 testes unitários.
+- **Commit Registrado**: `096b7cc` na branch `main`.
 
 ---
 
-### 2. Notas de Entrega do Claude Code (Fase 2)
-*(O Claude Code deve preencher este bloco ao concluir a Fase 2)*
+### 2. Parecer de Auditoria da Fase 2 (Antigravity - Gemini)
 
-- **Status da Entrega**: `AGUARDANDO EXECUÇÃO DO CLAUDE CODE`
-- **Data da Entrega**: *A preencher*
-- **Arquivos Criados/Modificados**:
-  - *Listar arquivos aqui*
+- **Status da Auditoria**: `APROVADO COM LOUVOR & LIBERADO PARA TESTE DO USUÁRIO`
+- **Data da Avaliação**: 2026-10-15
+- **Avaliação de Arquitetura e Engenharia**:
+  - **Amplitude de Fontes**: Entrega exemplar de 7 conectores multidisciplinares assíncronos (`br_gov`, `fr_gov`, `science_health`, `legal_justice`, `global_geopolitics`, `web_archive` e a excelente extensão proativa `climate_environment` com Copernicus/NOAA).
+  - **Princípio Custo Zero**: Implementação primorosa da TASK 2.6 (Modo Cidadão). A consulta direta sem chave funciona com tempo de resposta de 0.2s a 1.3s com fontes oficiais reais.
+  - **App do Cidadão (`app/web/`)**: Aprovado como interface oficial leve do Veritas Alpha 1.0. A solução de OCR no cliente com Tesseract.js sob demanda é genial por manter custo zero de servidor e privacidade total.
+  - **Decisões Técnicas Homologadas**:
+    1. *STJ Precedentes*: Exceção de timeout de 30s aprovada para downloads em lote com cache de 24h e warm-up em background.
+    2. *GDELT & Wayback*: Política de best-effort mantida com fallback gracioso para garantir resiliência.
+    3. *Dockerfile & Docker Compose*: Encaixados oficialmente na Fase 3 como Task 3.1.
+  - **Qualidade de Testes**: **215 testes unitários e de integração passando com 100% de sucesso**.
+- **Decisão**: `FASE 2 HOMOLOGADA. STATUS ALTERADO PARA 'AGUARDANDO VALIDAÇÃO DO USUÁRIO'. LIBERADA FASE 3 (PIPELINE MULTIMODAL & FORENSE) PARA O CLAUDE CODE.`
+
+---
+
+### 3. Notas de Entrega do Claude Code (Fase 2)
+
+- **Status da Entrega**: `PRONTO PARA REVISÃO DO ANTIGRAVITY`
+- **Data da Entrega**: 2026-10-14
+- **Arquivos Criados/Modificados** (tudo em `backend/`):
+  - **Novos conectores**: `app/connectors/br_gov.py` (Câmara, Senado, IBGE, Transparência), `fr_gov.py` (data.gouv.fr, INSEE Melodi, Légifrance), `legal_justice.py` (Legislação Federal, STJ precedentes, EUR-Lex, Cour de cassation/Judilibre), `science_health.py` (PubMed, OMS/WHO GHO), `global_geopolitics.py` (ReliefWeb, GDELT), `web_archive.py` (Wayback Machine), `piste.py` (OAuth PISTE compartilhado).
+  - **Removidos**: `app/connectors/br/` e `app/connectors/fr/` (conteúdo consolidado em `br_gov.py` / `fr_gov.py`).
+  - **Base e registro**: `connectors/base.py` (domínios, `_request` genérico GET/POST/texto, TTL por item, `disabled_reason`, `from_settings`, `warm_up`), `connectors/registry.py` (16 conectores, cliente HTTP + cache TTL compartilhados, warm-up em background).
+  - **Pipeline / modo cidadão**: `services/fact_checker.py`, `services/claim_heuristics.py` (novo), `schemas/evidence.py` (`Domain`, campos acadêmicos), `schemas/fact_check.py` (`SEM_CHAVE_IA_DADOS_BRUTOS`, `ai_used`), `engines/prompt_templates/fact_check.py`.
+  - **API**: `api/deps.py` (provedor opcional), `api/v1/fact_check.py`, `api/v1/connectors.py`, `api/v1/byok.py` (gratuitos primeiro), `engines/factory.py` (ordem Gemini → Groq → Ollama → pagos), `main.py`.
+  - **Config/deps**: `core/config.py`, `.env.example` (credenciais opcionais), `requirements.txt` (+`defusedxml`), `README.md`.
+  - **Testes novos**: `tests/test_science_health_connector.py`, `test_geopolitics_connector.py`, `test_legal_connector.py`, `test_web_archive_connector.py`, `test_gov_consolidated.py`, `test_claim_heuristics.py`; atualizados `conftest.py`, `test_fact_check_api.py`, `test_gov_connectors.py`.
 - **Comandos de Teste Executados**:
   ```bash
   cd backend
   .venv/Scripts/python -m pytest tests/ -v
+  .venv/Scripts/ruff check . && .venv/Scripts/ruff format --check .
   ```
 - **Evidências / Resultados dos Testes**:
-  - *Resumo dos resultados de testes aqui*
+  - `pytest`: **196 passed, 0 failed** (Python 3.13, Windows 11), sem rede: byok 43 · claim_heuristics 21 · fact_check_api 35 · geopolitics 10 · gov_connectors 25 · gov_consolidated 10 · legal 21 · science_health 15 · web_archive 16. `ruff` limpo.
+  - **Validação ao vivo** (APIs reais, fora da suíte):
+    - OK: Câmara, Senado, IBGE, Legislação Federal (Lei 12.965/2014, Decreto 11.000/2022, LC 101/2000), STJ precedentes, data.gouv.fr, INSEE, EUR-Lex, PubMed, OMS, Wayback (quando o Internet Archive responde a tempo).
+    - Lentos/instáveis hoje: **GDELT** (10–15 s, HTTP 429) e **Wayback CDX** (2–30 s) estouram com frequência o limite de 8 s; falham de forma graciosa em `connector_failures`.
+    - **Não validados ao vivo** (sem credenciais): Transparência, Légifrance, Judilibre, ReliefWeb. Testados só com mocks.
+  - **Modo cidadão ponta a ponta** (servidor real, sem chave): "vacinas causam autismo" → PubMed com meta-análises que refutam; "inflação passou de 10%" → IPCA/IBGE; "Lei 12.965/2014..." → Senado + 3 temas do STJ; "chômage en France" → INSEE. Todas HTTP 200 em 0,2–1,3 s.
+  - Chamada **real** ao Gemini com chave inválida → HTTP 200 em modo cidadão, sem vazar a chave.
 - **Decisões Técnicas e Observações**:
-  - *Notas para o Antigravity aqui*
+  1. **TASK 2.6 (modo cidadão)**: sem `X-Provider`, com configuração inválida, chave rejeitada, cota gratuita esgotada (429) ou provedor fora do ar, a checagem devolve **HTTP 200** com `verdict = SEM_CHAVE_IA_DADOS_BRUTOS`, `ai_used = false`, as fontes oficiais e o motivo em `notes` (com links das chaves gratuitas). **Mudança de comportamento**: os antigos 400/401/429/502 desse endpoint deixaram de existir. Se a IA falhar só no veredito, as evidências já coletadas são reaproveitadas (sem nova consulta).
+  2. **Free tier first**: `GET /api/v1/byok/providers` lista Gemini, Groq e Ollama primeiro, com `free_tier`, `requires_credit_card`, `get_key_url` e passo a passo de 1 clique; Swagger e README reescritos nessa ordem.
+  3. **Roteamento por domínio**: cada conector declara `domains`; a triagem (IA ou heurística) identifica os domínios da alegação e só as fontes pertinentes são consultadas (saúde → PubMed/OMS; leis → Senado/STJ/EUR-Lex; URL citada → Wayback). Sem domínio identificado, vale o comportamento da Fase 1 (política + economia). EUR-Lex entra para contexto FR.
+  4. **Sem IA, ainda útil**: `claim_heuristics.py` detecta país, domínios, URLs, citações de lei e traduz termos com um glossário offline PT/FR→EN, para PubMed/OMS/GDELT/EUR-Lex funcionarem sem LLM.
+  5. **ReliefWeb**: a API v1 pedida no board foi **desativada (HTTP 410)**; a v2 exige `appname` **aprovado** pela ONU/OCHA. Implementado com `VERITAS_RELIEFWEB_APPNAME`; desativado até alguém solicitar o appname.
+  6. **Planalto / LexML**: o Planalto não tem API e o LexML agora fica atrás de verificação anti-robô. Usei a **Legislação Federal do Senado** (mesmo acervo de normas federais), consultada por citação (tipo/número/ano); a busca por texto livre dessa API retorna vazio.
+  7. **STF / STJ**: o STF não tem API aberta. Usei o dataset aberto **"precedentes qualificados" do STJ** (1.209 teses firmadas, 151 súmulas originadas, 360 vínculos com temas de repercussão geral do STF). É um CSV de ~2,5 MB que leva ~9 s para baixar: **exceção ao limite de 8 s** só para downloads em lote (`VERITAS_DATASET_TIMEOUT_SECONDS=30`, cache de 24 h, pré-carregado em background na inicialização). Peço validação dessa exceção.
+  8. **EUR-Lex**: o `FILTER(CONTAINS(...))` levava 22–30 s; troquei pelo índice de texto do Virtuoso (`bif:contains`), que responde em **~0,1 s**.
+  9. **GDELT e Wayback**: mantive o limite de 8 s do CLAUDE.md. GDELT sem retentativas (política de 1 requisição a cada 5 s); Wayback com no máximo 50 versões e `fastLatest` para a captura mais recente; a Availability API do Internet Archive está respondendo vazio em ~10 s e virou só fallback. **Decisão para o Antigravity**: aceitar essas fontes como best-effort ou definir um timeout maior por fonte.
+  10. **Credenciais opcionais** (todas gratuitas): Transparência (`VERITAS_TRANSPARENCIA_API_KEY`), PISTE para Légifrance + Judilibre (um único token OAuth compartilhado e renovado antes de expirar), NCBI opcional. Sem credencial, o conector aparece como desativado em `GET /api/v1/connectors` e nunca bloqueia nada.
+  11. **INSEE**: usei a API **Melodi** (aberta, sem chave) para o catálogo de ~150 datasets oficiais; a `api.insee.fr` clássica exige chave. Os valores numéricos das séries ainda não são baixados (link `data_api` incluído na evidência).
+  12. **Evidência acadêmica**: `Evidence`/`SourceReference` ganharam `authors`, `venue`, `published_at` e `identifiers` (DOI, PMID, CELEX, norma, tema STJ, snapshot), base para o modo `law_academic` da Fase 4. PubMed marca `high_level_evidence` (meta-análise, revisão sistemática, ECR) e `retracted`.
+  13. **Segurança**: XML do PubMed lido com `defusedxml`; termos sanitizados contra injeção em OData (OMS) e SPARQL (EUR-Lex); erros do OAuth PISTE nunca repetem o corpo da resposta (pode conter o segredo).
+  14. **Pendência herdada da Fase 1**: o roadmap atualizado cita "Dockerfile com FFmpeg/ExifTool e Docker Compose" na Fase 1, mas isso não estava nas tarefas da Fase 1 quando ela foi entregue e **não existe no repositório**. Sugiro incluir na Fase 3 (que precisa de FFmpeg) ou criar uma tarefa própria.
+  15. Nenhum commit ou push foi feito nesta fase: tudo está no working tree, aguardando auditoria e validação do usuário.
 
 ---
 
-### 3. Validação do Usuário & Publicação Remota (Fase 2)
+#### Adendo 2026-10-15: App do cidadão (pedido direto do usuário durante a validação)
+- **Contexto**: ao testar, o usuário pediu uma interface bonita e simples em vez do Swagger: texto de um lado, resultado visual do outro, com fontes, tradução e entrada por imagem.
+- **Entregue**: página única em `backend/app/web/` (`index.html`, `styles.css`, `app.js`; ~73 KB, sem build nem framework), servida em `GET /`. O Swagger continua em `/docs`.
+  - Entrada por texto, **print/foto** (OCR Tesseract.js no navegador, carregado sob demanda: custo zero) e **link da fonte** (novo campo opcional `source_url` em `POST /api/v1/fact-check/text`, auditado na Wayback).
+  - Resultado visual: selo do veredito, medidor de confiança, citações `[E1]` clicáveis, cartões de fontes por área com DOI/PMID/data, botão **Traduzir** (Translator API do navegador com tempo-limite; senão, link do Google Tradutor), compartilhamento no WhatsApp e **cartão PNG**.
+  - Responsiva (celular/desktop), modo escuro automático, `prefers-reduced-motion`, dados externos sempre inseridos como texto (nunca HTML).
+  - Arquivos estáticos com `Cache-Control: no-cache` (revalidação por ETag), para ninguém ficar com versão antiga após atualizações.
+- **Testes**: 200 passed (novos: página e assets servidos, ausência de injeção de HTML no JS, validação de `source_url`). Verificação manual no navegador: desktop e celular, resultado com e sem IA (simulado), OCR de um print real (100% do texto) e geração do cartão PNG.
+- **Ponto para o Antigravity**: esta página antecipa parte da "interface de validação" prevista no roadmap (Fase 5), sem Next.js. Sugiro decidir se ela vira a base da interface oficial ou se continua como página leve de validação. Limitação observada: sem IA, boatos com palavras genéricas podem não achar fontes (a busca por palavras-chave é literal); com Gemini/Groq gratuitos a triagem melhora.
+
+---
+
+#### Adendo 2026-10-15 (2): correções a partir dos testes reais do usuário
+- **Nova área "Clima e ambiente"** (`app/connectors/climate_environment.py`, domínio `climate_environment`): Copernicus C3S/ECMWF (ERA5 diário, "Climate Pulse") e NOAA NCEI (anomalias anuais), sem chave. Calculam médias anuais, ranking dos anos mais quentes, anos-recorde e recordes consecutivos. Motivo: o teste do usuário sobre o Copernicus não tinha nenhuma fonte climática. Validado ao vivo: ambas confirmam 2023 e 2024 como recordes consecutivos; 2025 em 3º lugar. **Extensão de escopo para avaliação do Antigravity** (é um 7º módulo de conectores).
+- **IA que falhava em silêncio**: o usuário ativou o Groq e o resultado voltou sem IA, com o motivo escondido. Correções:
+  - `POST /api/v1/byok/test` testa a chave na hora; a página só ativa a IA se o teste passar e mostra o erro em linguagem simples;
+  - alerta visível no resultado quando a IA falha;
+  - opção "Lembrar neste aparelho" (localStorage, desligada por padrão);
+  - log no servidor do motivo da falha (sem a chave);
+  - validação tolerante das respostas de modelos abertos (ids `[1, 2]` → `E1, E2`, `"85%"`, `"true"`, listas longas, país/idioma por extenso).
+- **Modelo Gemini padrão**: `gemini-flash-latest` (apelido do Google para o Flash atual), em vez de `gemini-2.5-flash`.
+- **Afirmações vagas** (acontecimentos sem lugar/data/autor): dica visível pedindo detalhes, em vez de busca vazia sem explicação.
+- **Busca sem IA**: palavras genéricas ignoradas ("vídeos", "redes sociais", "confirmando"...), glossário PT/FR→EN ampliado (geopolítica, clima); "União Europeia" sozinha não aciona mais a área jurídica.
+- **Ordem das fontes**: fontes dedicadas ao tema aparecem primeiro; fontes amplas (PubMed) ficam limitadas a 3 quando as dedicadas já responderam.
+- **GDELT**: intervalo mínimo de 5,5 s entre chamadas e pausa de 60 s após HTTP 429 (evita bloqueio).
+- **Testes**: 215 passed (novo `tests/test_climate_and_ai_robustness.py`). Verificado no navegador: afirmação do Copernicus, teste de chave inválida (erro claro, IA não ativada) e alerta de falha da IA no resultado.
+
+---
+
+### 4. Validação do Usuário & Publicação Remota (Fase 2)
 *(Preenchido após o gatilho de aprovação do usuário)*
 
-- **Status de Publicação**: `PENDENTE`
-- **Instruções de Teste Apresentadas**:
-- **Aprovação do Usuário**: [ ] SIM | [ ] NÃO
-- **Commit Hash**:
-- **Branch / Repositório Remoto**: `main`
+- **Status de Publicação**: `PUBLICADA NO GITHUB` como **Alpha 1.2**: branch `feat/fase-2-fontes-primarias` mesclada em `main` (merge commit) e tag `v1.2.0-alpha`, a pedido explícito do usuário no chat em 2026-10-15, após validar localmente o app e o conector Groq ("conector groq funcional! quero que faça o push correto da versão alpha 1.2").
+- **Instruções de Teste Apresentadas**: `cd backend` → `.\run.ps1` → abrir `http://127.0.0.1:8000` (app do cidadão) ou `/docs` (API). Passo a passo e solução de problemas no `backend/README.md`.
+- **Aprovação do Usuário**: [x] SIM (validação local + pedido de publicação da Alpha 1.2) | [ ] NÃO
+- **Commit Hash**: merge da Fase 2 em `main` (tag `v1.2.0-alpha`); commits da fase: `5a5106c`, `f386efe`, `2e23b89`, `1182a8f`, `6e74b67`. Tag anterior de candidata: `v0.2.0-rc.1`.
+- **Correções feitas durante a validação do usuário**: diagnóstico de chaves recusadas (motivo do provedor, chaves mascaradas/incompletas, caracteres invisíveis), Gemini 400 "API key not valid" tratado como erro de chave, e escolha automática de modelo quando o padrão não está liberado para a conta (Groq respondia `model_not_found` para `llama-3.3-70b-versatile`). 223 testes passando.
+- **Branch / Repositório Remoto**: `main` → https://github.com/Azhd/veritas-engine (Alpha 1.2) · branch da fase preservada: `feat/fase-2-fontes-primarias`.

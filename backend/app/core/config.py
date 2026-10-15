@@ -25,6 +25,8 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        # Blank values in .env (e.g. "VERITAS_DEFAULT_PROVIDER=") mean "use the default".
+        env_ignore_empty=True,
     )
 
     app_name: str = "Veritas Engine"
@@ -44,7 +46,7 @@ class Settings(BaseSettings):
     groq_api_key: SecretStr | None = None
     ollama_base_url: str = "http://localhost:11434"
 
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-flash-latest"  # Google alias: always the current free-tier Flash
     anthropic_model: str = "claude-sonnet-5-5"
     openai_model: str = "gpt-4o"
     groq_model: str = "llama-3.3-70b-versatile"
@@ -60,6 +62,22 @@ class Settings(BaseSettings):
     connector_cache_ttl_seconds: float = Field(default=900.0, ge=0)
     connector_cache_max_entries: int = Field(default=1024, ge=1)
     connector_max_results: int = Field(default=5, ge=1, le=50)
+    #: Bulk open-data files (e.g. STJ precedents CSV, ~2.5 MB) get a longer timeout and cache.
+    dataset_timeout_seconds: float = Field(default=30.0, gt=0)
+    dataset_cache_ttl_seconds: float = Field(default=86_400.0, ge=0)
+    #: Preload bulk datasets (STJ precedents, INSEE catalog) in the background at startup.
+    connector_warm_up: bool = True
+
+    # ---------------- Optional credentials for primary sources ----------------
+    # Connectors whose credential is missing stay registered but are skipped (reported as
+    # disabled), so the pipeline never fails because of them.
+    ncbi_api_key: SecretStr | None = None  # optional: raises PubMed limit from 3 to 10 req/s
+    ncbi_email: str | None = None  # NCBI asks API users to identify themselves
+    reliefweb_appname: str | None = None  # must be approved by ReliefWeb (API v2)
+    transparencia_api_key: SecretStr | None = None  # Portal da Transparência (CGU), free
+    piste_client_id: SecretStr | None = None  # PISTE OAuth: Légifrance + Judilibre
+    piste_client_secret: SecretStr | None = None
+    piste_sandbox: bool = False
 
     def env_api_key(self, provider: ProviderName) -> SecretStr | None:
         return {
