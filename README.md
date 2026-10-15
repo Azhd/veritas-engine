@@ -159,9 +159,16 @@ servidor usa a chave apenas durante cada verificação e nunca a guarda.
 | Clima e ambiente | Copernicus (União Europeia), NOAA (EUA) |
 | Mundo e conflitos | GDELT, ReliefWeb (ONU)* |
 | Memória da web | Internet Archive (Wayback Machine) |
+| Quem ocupa um cargo ⚠️ | Wikidata (base pública colaborativa, **não oficial**): chefes de Estado e de governo atuais e cargos de uma pessoa |
 
 \* Precisam de uma credencial gratuita configurada no servidor; sem ela, ficam desligadas e não
 atrapalham nada. As demais funcionam sem cadastro.
+
+⚠️ Nenhuma API oficial responde "quem é o presidente de tal país". Para isso o Veritas usa o
+Wikidata, sempre marcado como **"Fonte pública não oficial"** e consultado depois das fontes
+oficiais. Cada dado diz se o Wikidata tem referência para ele; um veredito que só se apoia em dados
+**sem referência** fica limitado a **75% de confiança** (aparece como "provavelmente", nunca com o
+carimbo de confirmado).
 
 Cada afirmação só consulta as áreas a que pertence (saúde vai para PubMed e OMS; leis vão para o
 Senado, o STJ e o EUR-Lex...). Se uma fonte não responder a tempo, a verificação continua com as

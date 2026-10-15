@@ -378,6 +378,9 @@
     "level_high": "High level of evidence",
     "level_retracted": "Retracted article",
     "rewrite_hint": "The explanation above was written for another audience.",
-    "rewrite_button": "Rewrite for this audience"
+    "rewrite_button": "Rewrite for this audience",
+    "unofficial": "Public, non-official source",
+    "unofficial_hint": "Collaborative knowledge base (Wikidata). Useful to know who holds an office, but not an official source.",
+    "note_unofficial_cap": "Verdict backed only by a public, non-official base without references: confidence capped at 75%."
   }
 }

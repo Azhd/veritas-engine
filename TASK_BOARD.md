@@ -424,3 +424,14 @@
   1. Uma única chamada de IA por checagem: o estilo vai no prompt do veredito, e as seções objetivas são calculadas sem IA. Trocar de público reaproveita tudo; só a explicação precisa ser reescrita (nova checagem, sob demanda).
   2. ABNT segue a convenção brasileira em português ("Disponível em", "Acesso em") e APA em inglês, em qualquer idioma da página, como pedem as normas.
   3. Não há "modo" no servidor que esconda dados: a resposta traz todas as seções; o público decide o que o app mostra primeiro (auditabilidade).
+
+---
+
+#### Adendo 2026-10-15 (Fase 4): base pública Wikidata para cargos (pedido do usuário)
+- **Problema** (teste real do usuário): "Macron é presidente da Ucrânia" e "Macron é presidente da França" davam "Sem dados suficientes": nenhuma fonte consultada sabe quem ocupa um cargo (data.gouv.fr só tem conjuntos de dados; GDELT estourou o tempo), e a IA é proibida de usar conhecimento próprio.
+- **Entregue**: `app/connectors/public_knowledge.py` (`kb.wikidata`), autorizado pelo usuário com a menção "fonte pública não oficial". Ativado só para afirmações sobre cargos ou pessoas; reconhece ~45 países por nome em PT/EN/FR (evita "Franca", a cidade de SP, e verbos como "usa"/"irá"); busca pessoas no Wikidata e filtra só seres humanos; traz chefe de Estado e de governo atuais e os cargos da pessoa, com datas e se há referência. Resultados sempre depois das fontes oficiais. Selo "Fonte pública não oficial" no app (3 idiomas).
+- **Regra de confiabilidade**: veredito apoiado só em itens não oficiais **sem referência** fica limitado a 75% (nunca "confirmado"), com nota traduzida. Verificado: neste momento os dados de Macron/Zelensky/Lula no Wikidata **não têm referência**, então a regra se aplica a eles. Prompt do veredito instruído a dizer que a fonte é não oficial.
+- **Correções juntas**: o cartão PNG não mostra mais o título "Fontes oficiais" vazio nem corta a frase de confiança; uma frase em português sobre a França não é mais tratada como francesa (rótulos e busca no idioma certo).
+- **Verificado ao vivo**: "Macron é presidente da ucrania" → Wikidata: chefe de Estado da Ucrânia = Volodymyr Zelensky (desde 20/05/2019) e cargos de Macron (Presidente da França desde 14/05/2017); "Lula is the president of Brazil" → Lula desde 01/01/2023. Afirmações sem cargo não fazem nenhuma chamada ao Wikidata.
+- **Testes**: 338 passed (novo `tests/test_public_knowledge.py`). Commit local, sem push.
+- **Para o Antigravity**: o usuário pediu também outras bases públicas confiáveis "cuja veracidade é confirmada"; lista de candidatas apresentada no chat para aprovação antes de implementar.

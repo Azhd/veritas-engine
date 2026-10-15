@@ -67,8 +67,10 @@ const CONNECTORS = {
   "fr.judilibre": ["law", "fr"], "eu.eurlex": ["law", "en"], "science.pubmed": ["science", "en"],
   "health.who_gho": ["science", "en"], "geo.gdelt": ["world", "en"], "geo.reliefweb": ["world", "en"],
   "web.wayback": ["web", null], "climate.copernicus": ["climate", "pt"],
-  "climate.noaa": ["climate", "pt"],
+  "climate.noaa": ["climate", "pt"], "kb.wikidata": ["gov", null],
 };
+//: Public knowledge bases (collaborative, not official): flagged on every source card.
+const UNOFFICIAL = new Set(["kb.wikidata"]);
 
 const VERDICTS = {
   VERDADEIRO: { key: "v_true", tone: "true", icon: "check", emoji: "✅" },
@@ -877,7 +879,8 @@ function sourceCard(source, index) {
       el("span", { class: "source-id", text: source.evidence_id }),
       el("span", { class: "source-area", text: areaLabel(area) }),
       foreign ? el("span", { class: "lang-tag", text: lang.toUpperCase() }) : null,
-      source.cited ? el("span", { class: "cited", text: t("cited") }) : null),
+      source.cited ? el("span", { class: "cited", text: t("cited") }) : null,
+      UNOFFICIAL.has(source.connector) ? el("span", { class: "unofficial", title: t("unofficial_hint"), text: t("unofficial") }) : null),
     el("h4", { text: source.title }),
     el("p", { class: "publisher", text: source.publisher }),
     excerpt,
@@ -1336,6 +1339,7 @@ const NOTE_RULES = [
   [/^ffmpeg: duração/, "missing_ffmpeg"],
   [/^c2pa: detecção/, "missing_c2pa"],
   [/^Nenhuma chave de IA informada/, "note_no_key"],
+  [/^Veredito apoiado só em base pública não oficial/, "note_unofficial_cap"],
   // errors of the media route (shown on the error screen)
   [/^Envie um arquivo ou cole o link/, "err_need_media"],
   [/^Esse link aponta para uma rede interna/, "err_internal_link"],

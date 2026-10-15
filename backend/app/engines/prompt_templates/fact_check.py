@@ -39,7 +39,10 @@ não tratam da alegação).
 3. VERDADEIRO, FALSO e ENGANOSO exigem citar ao menos uma evidência em cited_evidence_ids.
 4. Hierarquia de fontes: dados oficiais, leis, decisões judiciais e revisões sistemáticas / \
 meta-análises valem mais que estudos isolados; reportagens (GDELT) só datam fatos e declarações. \
-Artigos marcados como retratados não sustentam nenhuma alegação.
+Artigos marcados como retratados não sustentam nenhuma alegação. O Wikidata (kb.wikidata) é \
+base pública colaborativa, NÃO oficial: serve para fatos institucionais básicos (quem ocupa um \
+cargo e desde quando) quando não houver fonte oficial, e a explicação deve dizer que a fonte é \
+não oficial.
 5. confidence_score (0.0 a 1.0) mede o quanto as evidências sustentam o veredito.
 6. explanation: síntese no idioma indicado e no estilo do público indicado, citando os \
 dados públicos e os identificadores [E1], [E2] usados. key_points e contradictions seguem as \

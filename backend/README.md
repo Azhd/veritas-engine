@@ -116,8 +116,13 @@ cidadão e explica o motivo em `notes`.
 | `global_geopolitics.py` | ReliefWeb (ONU/OCHA) | `VERITAS_RELIEFWEB_APPNAME` aprovado |
 | `climate_environment.py` | Copernicus C3S/ECMWF (ERA5 diário), NOAA NCEI (anual) | não |
 | `web_archive.py` | Internet Archive (Wayback Machine) | não |
+| `public_knowledge.py` | **Wikidata** (base pública colaborativa, **não oficial**): chefes de Estado/governo atuais (P35/P6) e cargos de pessoas (P39), com datas e indicação de referência | não |
 
-São 18 conectores, 14 sem nenhuma credencial. Fontes sem a credencial ficam registradas como
+São 19 conectores, 15 sem nenhuma credencial. O Wikidata só é consultado quando a afirmação fala
+de um cargo (presidente, ministro, rei, prefeito...) ou de uma pessoa; seus resultados ficam sempre
+depois das fontes oficiais, têm `data.official = false` e `data.referenced` (o Wikidata cita uma
+fonte para aquele dado?). Se o veredito se apoiar só em itens não oficiais sem referência, a
+confiança é limitada a 0,75 e uma nota explica o motivo. Fontes sem a credencial ficam registradas como
 desativadas (`GET /api/v1/connectors` mostra o motivo) e nunca bloqueiam a checagem.
 
 **Roteamento por domínio:** cada conector declara `domains` (`politics_legislation`,
@@ -179,7 +184,7 @@ cd backend
 .venv/Scripts/ruff check . && .venv/Scripts/ruff format --check .
 ```
 
-328 testes; nenhum faz chamadas de rede reais (SDKs e APIs públicas são mockados). Os testes de
+338 testes; nenhum faz chamadas de rede reais (SDKs e APIs públicas são mockados). Os testes de
 mídia (`tests/test_media_forensics.py`) usam um FFmpeg falso e imagens geradas na hora; os de C2PA
 assinam JPEGs com uma cadeia de certificados descartável e são pulados se o `c2pa-python` não estiver
 instalado.

@@ -856,3 +856,9 @@ body.home { justify-content: center; }
   .audience-options { grid-template-columns: minmax(0, 1fr); }
   .audience-options label { grid-template-columns: auto 1fr; align-items: baseline; gap: 8px; }
 }
+
+/* public, non-official knowledge bases (Wikidata) */
+.unofficial {
+  font-size: .7rem; font-weight: 700; padding: 1px 8px; border-radius: 999px; cursor: help;
+  color: var(--warn); background: var(--warn-soft);
+}

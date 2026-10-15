@@ -24,6 +24,7 @@ from app.connectors.legal_justice import (
     StjPrecedentsConnector,
 )
 from app.connectors.piste import PisteAuth
+from app.connectors.public_knowledge import WikidataConnector
 from app.connectors.science_health import PubMedConnector, WhoGhoConnector
 from app.connectors.web_archive import WaybackConnector
 from app.core.config import Settings
@@ -53,6 +54,8 @@ CONNECTOR_CLASSES: tuple[type[BaseGovConnector], ...] = (
     CopernicusClimateConnector,
     NoaaClimateConnector,
     WaybackConnector,
+    # Public knowledge bases (not official; listed last)
+    WikidataConnector,
 )
 
 

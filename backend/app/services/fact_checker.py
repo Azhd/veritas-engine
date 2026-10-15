@@ -20,6 +20,7 @@ import logging
 from collections.abc import Sequence
 
 from app.connectors.base import BaseGovConnector
+from app.connectors.public_knowledge import UNOFFICIAL_SOURCES
 from app.core.errors import (
     ConnectorError,
     ProviderAuthenticationError,
@@ -60,6 +61,9 @@ logger = logging.getLogger(__name__)
 
 #: Upper bound for confidence when the verdict had to be downgraded for lack of citations.
 DOWNGRADED_CONFIDENCE_CAP = 0.5
+#: Upper bound for confidence when a verdict rests only on unreferenced statements of public,
+#: non-official knowledge bases (Wikidata): "probably", never the near-certain stamp.
+UNOFFICIAL_CONFIDENCE_CAP = 0.75
 #: Max items from broad sources (e.g. PubMed) once dedicated sources already answered.
 SECONDARY_RESULTS_CAP = 3
 #: Provider failures that switch the request to citizen mode instead of returning an error.
@@ -166,6 +170,19 @@ class FactCheckService:
                 "nenhuma fonte oficial recuperada foi citada como base."
             )
             verdict, confidence = downgraded, min(confidence, DOWNGRADED_CONFIDENCE_CAP)
+        cited_items = [item for eid, item in numbered if eid in cited]
+        if (
+            verdict in ASSERTIVE_VERDICTS
+            and cited_items
+            and all(item.connector in UNOFFICIAL_SOURCES for item in cited_items)
+            and not any(item.data.get("referenced") for item in cited_items)
+            and confidence > UNOFFICIAL_CONFIDENCE_CAP
+        ):
+            confidence = UNOFFICIAL_CONFIDENCE_CAP
+            notes.append(
+                "Veredito apoiado só em base pública não oficial, sem referência: confiança "
+                f"limitada a {UNOFFICIAL_CONFIDENCE_CAP:.0%}."
+            )
 
         sources = _source_refs(numbered, cited)
         sources.sort(key=lambda s: not s.cited)  # cited sources first, stable otherwise
@@ -269,7 +286,9 @@ class FactCheckService:
                 continue
             # Sources dedicated to the claim's areas (e.g. Copernicus for a climate claim) come
             # first; broad sources that merely overlap (e.g. PubMed) come after them.
-            (dedicated if connector.domains <= domains else secondary).append(result)
+            # public non-official bases never take the place of official sources
+            official = connector.source_id not in UNOFFICIAL_SOURCES
+            (dedicated if official and connector.domains <= domains else secondary).append(result)
         if any(dedicated):
             secondary = [items[:SECONDARY_RESULTS_CAP] for items in secondary]
 

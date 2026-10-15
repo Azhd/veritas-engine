@@ -311,7 +311,13 @@ def heuristic_analysis(claim: str, language_hint: str | None = None) -> ClaimAna
     if language == "en":
         # The claim is already in English: its own words query the international sources.
         english = list(dict.fromkeys([*keywords, *english]))[:8]
-    elif country is CountryContext.FR:
+    elif (
+        country is CountryContext.FR
+        and not language_hint
+        and heuristic_language(claim, "fr") == "fr"
+    ):
+        # a claim about France with no clear Portuguese words is most likely French; a
+        # Portuguese sentence about France ("Macron é presidente da França") stays Portuguese
         language = "fr"
     return ClaimAnalysis(
         country=country,

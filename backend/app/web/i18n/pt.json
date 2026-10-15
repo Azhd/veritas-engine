@@ -378,6 +378,9 @@
     "level_high": "Alto nível de evidência",
     "level_retracted": "Artigo retratado",
     "rewrite_hint": "A explicação acima foi escrita para outro público.",
-    "rewrite_button": "Reescrever para este público"
+    "rewrite_button": "Reescrever para este público",
+    "unofficial": "Fonte pública não oficial",
+    "unofficial_hint": "Base de conhecimento colaborativa (Wikidata). Útil para saber quem ocupa um cargo, mas não é uma fonte oficial.",
+    "note_unofficial_cap": "Veredito apoiado só em base pública não oficial, sem referência: confiança limitada a 75%."
   }
 }
