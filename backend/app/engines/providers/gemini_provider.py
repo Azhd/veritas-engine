@@ -30,7 +30,10 @@ class GeminiProvider(BaseLLMProvider):
                 model=self.model, contents=prompt, config=config
             )
         except genai_errors.APIError as exc:
-            raise map_status_code(getattr(exc, "code", None), self.name.value) from None
+            body = getattr(exc, "details", None)
+            if not isinstance(body, dict):
+                body = {"error": {"message": getattr(exc, "message", None), "code": exc.status}}
+            raise map_status_code(getattr(exc, "code", None), self.name.value, body) from None
         except Exception as exc:  # network errors surface as httpx exceptions
             raise ProviderUnavailableError(
                 f"{self.name.value}: unexpected provider error ({type(exc).__name__})."

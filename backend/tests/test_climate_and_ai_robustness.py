@@ -254,3 +254,35 @@ def test_env_example_loads_as_copied_by_run_scripts():
     assert settings.gemini_api_key is None
     assert settings.reliefweb_appname is None
     assert settings.cors_origins == ["http://localhost:3000"]
+
+
+# =============================================================== provider error reasons
+def test_provider_reason_is_shown_and_secrets_redacted():
+    from app.engines.providers._errors import map_status_code, provider_reason
+
+    body = {
+        "error": {
+            "message": "Incorrect API key provided: sk-proj-abc123****xyz9. See your dashboard.",
+            "code": "invalid_api_key",
+        }
+    }
+    reason = provider_reason(body)
+    assert "sk-proj" not in reason and "[oculto]" in reason
+    assert "invalid_api_key" in reason
+    groq_like = map_status_code(401, "groq", {"error": {"message": "Invalid API Key"}})
+    assert isinstance(groq_like, ProviderAuthenticationError)
+    assert (
+        groq_like.message
+        == "groq: API key rejected or lacks permission (HTTP 401, Invalid API Key)."
+    )
+
+
+def test_gemini_invalid_key_400_is_an_authentication_error():
+    from app.engines.providers._errors import map_status_code
+
+    error = map_status_code(
+        400, "gemini", {"error": {"message": "API key not valid. Please pass a valid API key."}}
+    )
+    assert isinstance(error, ProviderAuthenticationError)
+    other = map_status_code(400, "gemini", {"error": {"message": "Invalid JSON payload"}})
+    assert not isinstance(other, ProviderAuthenticationError)

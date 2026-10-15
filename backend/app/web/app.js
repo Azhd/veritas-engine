@@ -264,19 +264,61 @@ function aiHeaders(ai) {
 }
 
 /** Turns provider error messages into plain Portuguese with a next step. */
-function friendlyAiError(message) {
-  const text = String(message || "").toLowerCase();
+/** Key formats of each provider, used to catch copy/paste mistakes before calling it. */
+const KEY_FORMATS = {
+  gemini: { prefix: "AIza", min: 35, typical: 39, console: "aistudio.google.com/apikey" },
+  groq: { prefix: "gsk_", min: 40, typical: 56, console: "console.groq.com/keys" },
+  openai: { prefix: "sk-", min: 30, typical: 100, console: "platform.openai.com/api-keys" },
+  anthropic: { prefix: "sk-ant-", min: 40, typical: 108, console: "console.anthropic.com" },
+};
+
+/** Removes spaces, line breaks, invisible characters and quotes that come along when copying. */
+function cleanKey(raw) {
+  return String(raw || "")
+    .replace(/[\s\u00A0\u200B-\u200D\u2060\uFEFF]/g, "")
+    .replace(/^["'“”‘’`]+|["'“”‘’`]+$/g, "");
+}
+
+/** Returns a plain-language problem with the pasted key, or null if it looks right. */
+function keyProblem(providerName, key) {
+  const format = KEY_FORMATS[providerName];
+  if (!format || !key) return null;
+  const name = PROVIDER_NAMES[providerName] || providerName;
+  if (/[*•…]|\.\.\./.test(key)) {
+    return `Essa chave está mascarada (tem * ou …). É a versão resumida que aparece na lista do painel. No ${name}, a chave completa só aparece uma vez, quando é criada: crie uma chave nova em ${format.console} e copie na hora.`;
+  }
+  if (!key.startsWith(format.prefix)) {
+    return `As chaves do ${name} começam com “${format.prefix}”. Confira se você copiou a chave (e não o nome dela) e se escolheu o provedor certo acima.`;
+  }
+  if (key.length < format.min) {
+    return `A chave parece incompleta: tem ${key.length} caracteres, e as do ${name} costumam ter ${format.typical}. Copie de novo a chave inteira.`;
+  }
+  return null;
+}
+
+/** Turns provider error messages into plain Portuguese with a next step. */
+function friendlyAiError(message, providerName) {
+  const raw = String(message || "");
+  const text = raw.toLowerCase();
+  const name = PROVIDER_NAMES[providerName] || "provedor";
+  const reason = raw.match(/\(([^()]*)\)\.?$/)?.[1];
+  const said = reason ? ` Resposta do ${name}: “${reason}”.` : "";
   if (text.includes("rejected") || text.includes("permission")) {
-    return "A chave foi recusada pelo provedor. Confira se copiou a chave inteira, sem espaços, e se escolheu o provedor certo.";
+    const format = KEY_FORMATS[providerName];
+    const tip = format
+      ? ` Dica: no ${name}, a chave completa só aparece uma vez, no momento em que é criada. Se você copiou da lista de chaves, crie uma nova em ${format.console} e copie na hora.`
+      : " Confira se copiou a chave inteira e se escolheu o provedor certo.";
+    return `O ${name} não aceitou essa chave.${said}${tip}`;
   }
   if (text.includes("rate limit") || text.includes("quota")) {
-    return "A cota gratuita acabou por enquanto. Espere alguns minutos ou use outro provedor gratuito.";
+    return `A cota gratuita acabou por enquanto. Espere alguns minutos ou use outro provedor gratuito.${said}`;
   }
-  if (text.includes("not found")) return "O modelo de IA não está disponível para esta chave.";
+  if (text.includes("not found")) return `O modelo de IA não está disponível para esta chave.${said}`;
   if (text.includes("timed out") || text.includes("demorou")) return "A IA demorou demais para responder. Tente de novo.";
   if (text.includes("connect")) return "Não foi possível falar com o provedor de IA. Verifique sua internet.";
+  if (text.includes("malformed")) return "A chave tem caracteres inválidos. Copie de novo, só a chave.";
   if (text.includes("requires an api key") || text.includes("x-api-key")) return "Cole sua chave no campo acima.";
-  return message;
+  return raw;
 }
 
 function showAiStatus(ok, message) {
@@ -288,9 +330,16 @@ function showAiStatus(ok, message) {
 
 async function useAi() {
   const provider = state.providers.find((p) => p.name === state.selected);
-  const key = $("apiKey").value.trim();
+  const key = cleanKey($("apiKey").value);
+  $("apiKey").value = key;
   if (provider?.requires_api_key !== false && !key) {
     showAiStatus(false, "Cole sua chave no campo acima.");
+    $("apiKey").focus();
+    return;
+  }
+  const problem = keyProblem(state.selected, key);
+  if (problem) {
+    showAiStatus(false, problem);
     $("apiKey").focus();
     return;
   }
@@ -302,7 +351,7 @@ async function useAi() {
     const response = await fetch("/api/v1/byok/test", { method: "POST", headers: aiHeaders(candidate) });
     const result = await response.json();
     if (!result.ok) {
-      showAiStatus(false, `Não funcionou. ${friendlyAiError(result.message)}`);
+      showAiStatus(false, `Não funcionou. ${friendlyAiError(result.message, candidate.provider)}`);
       return;
     }
     state.ai = candidate;
@@ -733,7 +782,7 @@ function renderAlerts(report) {
     box.append(el("div", { class: "alert warn" }, icon("warning"),
       el("div", {},
         el("b", { text: "A IA não respondeu, então mostramos só os dados oficiais." }),
-        el("p", { text: friendlyAiError(aiFailure) }),
+        el("p", { text: friendlyAiError(aiFailure, state.ai?.provider) }),
         el("button", {
           type: "button", class: "link-btn", text: "Testar minha chave",
           onclick: () => { $("aiPanel").open = true; $("aiPanel").scrollIntoView({ behavior: "smooth", block: "center" }); },
