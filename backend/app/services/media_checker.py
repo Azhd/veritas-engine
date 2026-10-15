@@ -52,6 +52,7 @@ class MediaCheckService:
         claim: str | None = None,
         country: CountryContext | None = None,
         notes: list[str] | None = None,
+        language: str | None = None,
     ) -> MediaFactCheckReport:
         if upload is None and not url:
             raise MediaError("Envie um arquivo ou cole o link do vídeo, áudio ou imagem.")
@@ -79,7 +80,7 @@ class MediaCheckService:
         context = (claim or "").strip()
         if context:
             report = await self.fact_checker.check_text(
-                context, llm, country_override=country, notes=list(notes)
+                context, llm, country_override=country, notes=list(notes), language=language
             )
             checks.append(TimedCheck(label="Texto informado", quote=context, report=report))
 
@@ -93,7 +94,11 @@ class MediaCheckService:
             # Sequential on purpose: free tiers (Groq/Gemini) limit requests per minute.
             for item in timed:
                 report = await self.fact_checker.check_text(
-                    item.claim, llm, country_override=country, notes=list(notes)
+                    item.claim,
+                    llm,
+                    country_override=country,
+                    notes=list(notes),
+                    language=language,
                 )
                 checks.append(
                     TimedCheck(

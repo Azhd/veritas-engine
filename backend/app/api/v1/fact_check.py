@@ -16,6 +16,7 @@ from app.schemas.fact_check import (
     CountryContext,
     FactCheckReport,
     MediaFactCheckReport,
+    ReplyLanguage,
     TextFactCheckRequest,
 )
 from app.services.fact_checker import FactCheckService
@@ -111,6 +112,7 @@ async def fact_check_text(
         country_override=body.country,
         notes=selection.notes,
         source_url=body.source_url,
+        language=body.language,
     )
 
 
@@ -135,6 +137,9 @@ async def fact_check_media(
         str | None, Form(max_length=5000, description="Texto que acompanha a mídia (opcional).")
     ] = None,
     country: Annotated[CountryContext | None, Form()] = None,
+    language: Annotated[
+        ReplyLanguage | None, Form(description="Idioma das explicações (pt, en, fr).")
+    ] = None,
 ) -> MediaFactCheckReport:
     return await service.check(
         selection.provider,
@@ -143,4 +148,5 @@ async def fact_check_media(
         claim=claim,
         country=country,
         notes=selection.notes,
+        language=language,
     )

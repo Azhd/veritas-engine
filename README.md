@@ -11,10 +11,16 @@
 - **Novo (Fase 3):** analisa **fotos, vídeos e áudios** (arquivo ou link do YouTube, TikTok, X,
   Instagram): diz se a imagem foi **gerada por IA** (credenciais C2PA), mostra câmera, data e local
   da foto, transcreve a fala com **minutagem** e confere cada afirmação nas fontes oficiais.
-- Leve: a página inteira tem cerca de 100 KB e funciona no celular.
+- **Em português, inglês e francês:** cada idioma tem a sua página (`/pt/`, `/en/`, `/fr/`), e as
+  explicações da IA vêm no idioma escolhido.
+- **Confiança bem visível:** quando a IA tem alta confiança, o resultado vira um cartão colorido
+  com carimbo (**CONFIRMADO** em verde ou **FALSO** em vermelho) e uma régua de Falso a Verdadeiro.
+- Leve: cada página tem cerca de 130 KB e funciona no celular.
 
 > **Status:** versão **Alpha 1.2** (tag `v1.2.0-alpha`) publicada na `main`. A **Fase 3** (perícia de
-> vídeo, áudio e imagens) está pronta para revisão na branch `feat/fase-3-forense-multimodal`.
+> vídeo, áudio e imagens) está pronta para revisão na branch `feat/fase-3-forense-multimodal`
+> (tag `v1.3.0-rc.1`). As páginas em 3 idiomas e o destaque de confiança estão em validação na
+> branch `feat/multilingue-confiance`.
 
 ---
 
@@ -81,15 +87,29 @@ e abra **http://localhost:8000**.
 
 ## Como usar
 
+Ao abrir **http://127.0.0.1:8000**, escolha o idioma: **Português**, **English** ou **Français**.
+Dá para trocar a qualquer momento pelos botões **PT · EN · FR** no topo da página.
+
 1. Cole o texto, cole um print (**Ctrl + V**) ou envie uma foto, um vídeo ou um áudio (até 50 MB).
 2. (Opcional) Cole o **link** de onde a informação veio: o Veritas verifica no Internet Archive se a
    página foi alterada ou apagada. Se for link de vídeo (YouTube, TikTok, X, Instagram), o vídeo é
    analisado.
 3. Clique em **Verificar agora**.
 
-O resultado mostra o selo do veredito, um resumo em português simples e os cartões das fontes
-oficiais, com data, identificadores (DOI, PMID, número da lei...) e o botão **"Abrir fonte oficial"**.
-Fontes em inglês ou francês têm o botão **"Traduzir"**. Dá para enviar o resultado no WhatsApp,
+O resultado mostra o selo do veredito, um resumo em linguagem simples (no idioma da página) e os
+cartões das fontes oficiais, com data, identificadores (DOI, PMID, número da lei...) e o botão
+**"Abrir fonte oficial"**. Fontes em outro idioma têm o botão **"Traduzir"**.
+
+Com IA, a **confiança** aparece de três jeitos:
+
+| Confiança | Como aparece |
+| --- | --- |
+| **Alta** (80% ou mais) | Cartão inteiro colorido com carimbo: verde **CONFIRMADO** quando é verdadeiro, vermelho listrado **FALSO** quando é quase certo que é falso, laranja **ENGANOSO** |
+| **Média** (55% a 79%) | Cartão na cor do veredito, com "Provavelmente verdadeiro/falso" |
+| **Baixa** (menos de 55%) | Cartão discreto com o aviso "leia as fontes antes de concluir" |
+
+Em todos os casos, uma **régua de Falso a Verdadeiro** mostra onde o veredito ficou. O cartão em
+imagem e a mensagem do WhatsApp também levam o nível de confiança. Dá para enviar o resultado no WhatsApp,
 copiar o resumo ou baixar um cartão em imagem.
 
 Para fotos, vídeos e áudios aparecem também:
@@ -165,5 +185,5 @@ O andamento detalhado de cada fase está no [TASK_BOARD.md](TASK_BOARD.md).
 
 ```powershell
 cd backend
-.venv\Scripts\python -m pytest -q      # 275 testes, nenhum acessa a internet
+.venv\Scripts\python -m pytest -q      # 298 testes, nenhum acessa a internet
 ```

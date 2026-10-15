@@ -29,7 +29,7 @@ python -m venv .venv
 .venv/Scripts/python -m uvicorn app.main:app --reload
 ```
 
-- **App do cidadão: `http://127.0.0.1:8000/`** · Swagger (desenvolvedores): `/docs` · ReDoc: `/redoc` · Health: `GET /healthz`
+- **App do cidadão: `http://127.0.0.1:8000/`** (escolha do idioma → `/pt/`, `/en/`, `/fr/`) · Swagger (desenvolvedores): `/docs` · ReDoc: `/redoc` · Health: `GET /healthz`
 
 ### Dependências de mídia (em camadas)
 
@@ -53,9 +53,20 @@ A imagem (`backend/Dockerfile`, multi-stage) inclui FFmpeg, ExifTool, C2PA e yt-
 backend é lido se existir; a mídia temporária fica no volume `veritas-media` e é apagada após cada
 análise. (O build ainda não foi testado: o ambiente de desenvolvimento Windows não tem Docker.)
 
-## App do cidadão (`/`)
+## App do cidadão (`/`, `/pt/`, `/en/`, `/fr/`)
 
-Página única e responsiva (HTML/CSS/JS puros em `app/web/`, ~100 KB, sem build nem dependências):
+Página responsiva (HTML/CSS/JS puros em `app/web/`, ~130 KB por idioma, sem build nem dependências):
+
+- **Idiomas:** `/` é a escolha de idioma (sugere o do navegador); `/pt/`, `/en/` e `/fr/` são páginas
+  completas, geradas por `app/web_pages.py` a partir do modelo `web/index.html` (`{{chave}}`) e dos
+  dicionários `web/i18n/<idioma>.json`. O dicionário vai embutido na página para o `app.js` (sem
+  requisição extra nem "piscar" outro idioma). A página envia `language` à API, então a explicação
+  da IA e o texto do modo cidadão saem no idioma da página. As notas do servidor (em português) são
+  traduzidas na página por `NOTE_RULES`.
+- **Confiança:** com IA, uma régua de Falso a Verdadeiro posiciona o veredito. Com confiança de 80%
+  ou mais em Verdadeiro/Falso/Enganoso, o cartão fica todo colorido com carimbo (CONFIRMADO / FALSO /
+  ENGANOSO); entre 55% e 79% aparece "provavelmente"; abaixo disso, um aviso de confiança baixa.
+  A linha do tempo de mídia, o cartão PNG e o texto do WhatsApp mostram o mesmo nível.
 
 - **Entrada:** texto, **print/foto** (o texto é lido no próprio aparelho por OCR gratuito, o Tesseract.js,
   baixado só quando uma imagem é enviada) e o **link de onde a informação veio** (auditado na Wayback Machine).
@@ -145,7 +156,7 @@ cd backend
 .venv/Scripts/ruff check . && .venv/Scripts/ruff format --check .
 ```
 
-275 testes; nenhum faz chamadas de rede reais (SDKs e APIs públicas são mockados). Os testes de
+298 testes; nenhum faz chamadas de rede reais (SDKs e APIs públicas são mockados). Os testes de
 mídia (`tests/test_media_forensics.py`) usam um FFmpeg falso e imagens geradas na hora; os de C2PA
 assinam JPEGs com uma cadeia de certificados descartável e são pulados se o `c2pa-python` não estiver
 instalado.
@@ -187,8 +198,8 @@ curl -X POST http://127.0.0.1:8000/api/v1/fact-check/media \
 
 | Rota | Descrição |
 | --- | --- |
-| `POST /api/v1/fact-check/text` | Checagem (`claim`, `country` e `source_url` opcionais); sem IA devolve `SEM_CHAVE_IA_DADOS_BRUTOS` |
-| `POST /api/v1/fact-check/media` | Multipart: `file` (até 50 MB) **ou** `url`, mais `claim` e `country` opcionais. Devolve `forensics` (laudo) e `checks` (afirmações com minutagem e o relatório de cada uma) |
+| `POST /api/v1/fact-check/text` | Checagem (`claim`, `country`, `source_url` e `language` = `pt`/`en`/`fr` opcionais); sem IA devolve `SEM_CHAVE_IA_DADOS_BRUTOS` |
+| `POST /api/v1/fact-check/media` | Multipart: `file` (até 50 MB) **ou** `url`, mais `claim`, `country` e `language` opcionais. Devolve `forensics` (laudo) e `checks` (afirmações com minutagem e o relatório de cada uma) |
 | `GET /api/v1/media/capabilities` | Ferramentas de mídia disponíveis, o que dá para analisar e o que falta instalar |
 | `POST /api/v1/byok/test` | Testa a chave/modelo informados nos headers (`{ok, provider, model, message}`) |
 | `GET /api/v1/byok/providers` | Provedores (gratuitos primeiro) com o passo a passo para obter a chave |
@@ -210,6 +221,7 @@ modelo escolhido e o app passa a enviá-lo em `X-Model`.
 ```
 app/
 ├── main.py                     # create_app(), lifespan (warm-up de datasets), /healthz, CORS
+├── web_pages.py                # páginas /pt/, /en/, /fr/ (modelo + dicionário embutido)
 ├── core/                       # config (pydantic-settings, prefixo VERITAS_), erros → HTTP
 ├── api/deps.py                 # provedor BYOK opcional por requisição (criado e descartado)
 ├── api/v1/                     # fact_check.py (/text, /media), connectors.py, byok.py, media.py
@@ -221,5 +233,6 @@ app/
 ├── schemas/                    # evidence.py (Domain, Evidence), fact_check.py, forensics.py
 ├── services/                   # fact_checker.py (pipeline + modo cidadão), media_checker.py,
 │                               # claim_heuristics.py
-└── web/                        # app do cidadão: index.html, styles.css, app.js
+└── web/                        # app do cidadão: home.html (idiomas), index.html (modelo),
+                                # styles.css, app.js, home.js, i18n/{pt,en,fr}.json
 ```

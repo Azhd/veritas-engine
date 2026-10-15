@@ -34,8 +34,25 @@ _PT_WORDS = {
     "nao", "que", "de", "do", "da", "os", "as", "um", "uma", "para", "com", "foi", "sao", "por",
     "no", "na", "nos", "em", "ao",
 }  # fmt: skip
-_FR_WORDS = {"le", "la", "les", "des", "est", "une", "pour", "avec", "pas", "ont", "sont", "du"}
-_STOPWORDS = _PT_WORDS | _FR_WORDS | {
+_FR_WORDS = {
+    "le", "la", "les", "des", "est", "une", "pour", "avec", "pas", "ont", "sont", "du", "et",
+    "au", "aux", "dans", "sur", "qui", "cette", "depuis", "ete",
+}  # fmt: skip
+_EN_WORDS = {
+    "the", "is", "are", "was", "were", "and", "of", "to", "that", "have", "has", "with", "for",
+    "not", "this", "from", "they", "will", "been", "their", "does", "than", "it", "its", "in",
+    "by", "be",
+}  # fmt: skip
+_EN_STOPWORDS = {
+    "that", "have", "with", "this", "from", "they", "will", "were", "been", "their", "about",
+    "into", "than", "said", "says", "claims", "claim", "shows", "show", "people", "years",
+    "year", "after", "before", "last", "more", "over", "only", "because", "causes", "every",
+    "what", "when", "which", "there", "these", "those", "would", "could", "should", "does",
+    "made", "make", "just", "also", "very", "really", "many", "much", "most", "some", "news",
+    "photo", "image", "share", "shared", "true", "false", "fake", "breaking", "today", "week",
+    "month", "months", "since", "according", "everyone",
+}  # fmt: skip
+_STOPWORDS = _PT_WORDS | _FR_WORDS | _EN_STOPWORDS | {
     "e", "o", "a", "em", "no", "na", "nos", "por", "mais", "menos", "sobre", "ao", "aos", "seu",
     "sua", "et", "en", "au", "aux", "dans", "sur", "par", "qui", "ce", "cette", "il", "elle",
     "ser", "ter", "tem", "teve", "ja", "isso", "este", "esta", "entre", "desde", "ano", "anos",
@@ -103,12 +120,14 @@ _DOMAIN_TRIGGERS: dict[Domain, tuple[str, ...]] = {
         "grippe", "dengue", "sarampo", "rougeole", "hiv", "aids", "obesi", "diabet",
         "expectativa de vida", "esperance de vie", "mortalidade", "mortalite", "oms", "anvisa",
         "estudo", "etude", "medic", "hospital", "tabac", "tabaco", "malaria", "tuberculos",
+        "health", "disease", "cure ", "study", "studies", "measles", "flu ", "smoking",
     ),
     Domain.GEOPOLITICS: (
         "guerra", "guerre", "conflito", "conflit", "cessar-fogo", "cessez-le-feu", "onu ",
         "otan", "nato", "invas", "refugiad", "refugie", "humanitari", "ucrania", "ukraine",
         "russia", "russie", "israel", "gaza", "palestin", "ira ", "iran", "sudao", "soudan",
         "bombarde", "sancoes", "sanctions", "tratado", "traite", "genocid", "militar",
+        " war ", "ceasefire", "conflict", "refugee", "treaty", "missile", "troops",
     ),
     Domain.LEGAL_JUSTICE: (
         "lei ", "loi ", "decreto", "decret", "stf", "stj", "supremo", "tribunal", "sumula",
@@ -116,12 +135,14 @@ _DOMAIN_TRIGGERS: dict[Domain, tuple[str, ...]] = {
         "cour de cassation", "juiz", "juge", "julgament", "direito", "droit", "diretiva",
         "directive", "regulamento europeu", "reglement europeen", "ilegal",
         "illegal", "proibid", "interdit", "medida provisoria",
+        " law ", " laws ", "court", "constitution", "statute", "judge", "banned", "ruling",
     ),
     Domain.ECONOMY_STATISTICS: (
         "inflac", "inflation", "ipca", "desempreg", "desocupa", "chomage", "pib", "populac",
         "population", "habitantes", "salario", "salaire", "imposto", "impot", "orcamento",
         "budget", "divida", "dette", "pobreza", "pauvrete", "renda", "revenu", "economia",
         "economie", "precos", "prix",
+        "unemployment", "gdp", " tax", "wage", "salary", "poverty", "debt", "price",
     ),
     Domain.CLIMATE_ENVIRONMENT: (
         "clima", "climat", "aquecimento", "rechauffement", "temperatura", "temperature",
@@ -129,11 +150,14 @@ _DOMAIN_TRIGGERS: dict[Domain, tuple[str, ...]] = {
         "carbone", "copernicus", "el nino", "degelo", "geleira", "glacier", "nivel do mar",
         "niveau de la mer", "desmatamento", "deforestation", "emissoes", "emissions",
         "acordo de paris", "accord de paris", "ipcc", "giec", "seca", "secheresse",
+        "warming", "heatwave", "heat wave", "drought", "sea level", "carbon", "greenhouse",
+        "wildfire",
     ),
     Domain.POLITICS_LEGISLATION: (
         "deputad", "senador", "senat", "projeto de lei", "votac", "vote", "congresso",
         "camara", "assemblee", "depute", "presidente", "president", "ministr", "governo",
         "gouvernement", "eleic", "election", "partido", "parti ", "emenda",
+        "congress", "parliament", "government", " bill ", "lawmaker",
     ),
 }  # fmt: skip
 
@@ -247,11 +271,31 @@ VAGUE_CLAIM_TIP = (
 
 
 # ---------------------------------------------------------------------- full analysis
-def heuristic_analysis(claim: str) -> ClaimAnalysis:
+def heuristic_language(claim: str, hint: str | None = None) -> str:
+    """'en', 'fr' or 'pt' by counting common function words; ``hint`` breaks ties."""
+    words = re.findall(r"[a-z]+", normalize(claim))
+    hits = {
+        "pt": sum(w in _PT_WORDS for w in words),
+        "fr": sum(w in _FR_WORDS for w in words),
+        "en": sum(w in _EN_WORDS for w in words),
+    }
+    best = max(hits, key=lambda lang: hits[lang])
+    if hits[best] == 0 or list(hits.values()).count(hits[best]) > 1:
+        return hint if hint in hits else "pt"
+    return best
+
+
+def heuristic_analysis(claim: str, language_hint: str | None = None) -> ClaimAnalysis:
     country = heuristic_country(claim)
     urls = extract_urls(claim)
     english = translate_terms(claim)
     keywords = heuristic_keywords(claim)
+    language = heuristic_language(claim, language_hint)
+    if language == "en":
+        # The claim is already in English: its own words query the international sources.
+        english = list(dict.fromkeys([*keywords, *english]))[:8]
+    elif country is CountryContext.FR:
+        language = "fr"
     return ClaimAnalysis(
         country=country,
         keywords=keywords,
@@ -261,7 +305,7 @@ def heuristic_analysis(claim: str) -> ClaimAnalysis:
         domains=heuristic_domains(claim, urls),
         legal_references=[ref.label for ref in parse_legal_references([claim])],
         urls=urls,
-        language="fr" if country is CountryContext.FR else "pt",
+        language=language,
     )
 
 

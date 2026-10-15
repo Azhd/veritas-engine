@@ -95,18 +95,21 @@ class FactCheckService:
         *,
         notes: list[str] | None = None,
         source_url: str | None = None,
+        language: str | None = None,
     ) -> FactCheckReport:
+        """``language`` (pt/en/fr) is the reader's language; defaults to the claim's."""
         notes = list(notes or [])
 
         # 2. context + search terms
         if llm is None:
-            analysis = heuristic_analysis(claim)
+            analysis = heuristic_analysis(claim, language)
         else:
             try:
                 analysis = await self._analyze_claim(claim, llm, notes)
             except AI_FAILURES as exc:
                 notes.append(_ai_failure_note(exc))
-                llm, analysis = None, heuristic_analysis(claim)
+                llm, analysis = None, heuristic_analysis(claim, language)
+        reply_language = language or analysis.language
         if country_override is not None:
             analysis.country = country_override
         analysis = enrich_analysis(analysis, claim)
@@ -122,19 +125,23 @@ class FactCheckService:
         evidence, queried, failures = await self.collect_evidence(analysis)
         numbered = [(f"E{i}", item) for i, item in enumerate(evidence, start=1)]
         if llm is None:
-            return self._citizen_report(claim, analysis, numbered, queried, failures, notes)
+            return self._citizen_report(
+                claim, analysis, numbered, queried, failures, notes, reply_language
+            )
 
         # 4 + 5. grounded verdict
         try:
             llm_verdict = await llm.generate_structured(
-                build_verdict_prompt(claim, numbered, analysis.language),
+                build_verdict_prompt(claim, numbered, reply_language),
                 LLMVerdict,
                 system_instruction=VERDICT_SYSTEM,
                 temperature=0.0,
             )
         except AI_FAILURES as exc:
             notes.append(_ai_failure_note(exc))
-            return self._citizen_report(claim, analysis, numbered, queried, failures, notes)
+            return self._citizen_report(
+                claim, analysis, numbered, queried, failures, notes, reply_language
+            )
 
         # 6. auditable report (only sources actually retrieved can appear)
         known_ids = {eid for eid, _ in numbered}
@@ -260,6 +267,7 @@ class FactCheckService:
         queried: list[str],
         failures: list[ConnectorFailure],
         notes: list[str],
+        language: str,
     ) -> FactCheckReport:
         notes.append(FREE_KEYS_HINT)
         return FactCheckReport(
@@ -267,7 +275,7 @@ class FactCheckService:
             verdict=Verdict.SEM_CHAVE_IA_DADOS_BRUTOS,
             confidence_score=0.0,
             primary_sources=_source_refs(numbered, cited=set()),
-            explanation=citizen_explanation(len(numbered), analysis.language),
+            explanation=citizen_explanation(len(numbered), language),
             country_context=analysis.country,
             domains=analysis.domains,
             keywords=analysis.keywords,
@@ -281,6 +289,17 @@ class FactCheckService:
 
 
 def citizen_explanation(count: int, language: str) -> str:
+    if language == "en":
+        if not count:
+            return (
+                "Citizen mode (no AI): no official source was found for this claim. Try other "
+                "keywords or add a free AI key."
+            )
+        return (
+            f"Citizen mode (no AI): we found {count} related official source(s). No automatic "
+            "verdict was produced: read the excerpts and open the official links below to "
+            "check for yourself."
+        )
     if language == "fr":
         if not count:
             return (

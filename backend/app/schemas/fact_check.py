@@ -27,6 +27,14 @@ class Verdict(StrEnum):
 ASSERTIVE_VERDICTS = frozenset({Verdict.VERDADEIRO, Verdict.FALSO, Verdict.ENGANOSO})
 
 
+class ReplyLanguage(StrEnum):
+    """Language of the citizen app page; the verdict explanation is written in it."""
+
+    PT = "pt"
+    EN = "en"
+    FR = "fr"
+
+
 class CountryContext(StrEnum):
     BR = "BR"
     FR = "FR"
@@ -51,6 +59,10 @@ class TextFactCheckRequest(BaseModel):
         default=None,
         max_length=2048,
         description="Link de onde a informação veio; também é auditado no Internet Archive.",
+    )
+    language: ReplyLanguage | None = Field(
+        default=None,
+        description="Idioma da explicação (pt, en, fr). Sem ele, usa o idioma da afirmação.",
     )
 
     @field_validator("source_url")

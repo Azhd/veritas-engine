@@ -28,8 +28,9 @@ from app.engines.factory import ProviderFactory
 from app.forensics.tools import detect_capabilities
 from app.services.fact_checker import FactCheckService
 from app.services.media_checker import MediaCheckService
+from app.web_pages import SUPPORTED_LANGUAGES, render_app_page
 
-#: Citizen web app (static HTML/CSS/JS, no build step) served at ``/``.
+#: Citizen web app (static HTML/CSS/JS, no build step): chooser at ``/``, app at ``/pt/`` etc.
 WEB_DIR = Path(__file__).parent / "web"
 #: Browsers otherwise cache the assets heuristically and keep stale versions after an update;
 #: ``no-cache`` still lets them reuse the file after a cheap ETag check (HTTP 304).
@@ -159,10 +160,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return HTMLResponse(html)
 
     @app.get("/", include_in_schema=False)
-    async def web_app() -> FileResponse:
+    async def language_chooser() -> FileResponse:
         return FileResponse(
-            WEB_DIR / "index.html", media_type="text/html", headers=REVALIDATE_HEADERS
+            WEB_DIR / "home.html", media_type="text/html", headers=REVALIDATE_HEADERS
         )
+
+    def app_page(lang: str) -> Any:
+        async def page() -> HTMLResponse:
+            return HTMLResponse(render_app_page(lang), headers=REVALIDATE_HEADERS)
+
+        return page
+
+    for lang in SUPPORTED_LANGUAGES:
+        # "/en" is redirected to "/en/" by the router (redirect_slashes).
+        app.add_api_route(f"/{lang}/", app_page(lang), include_in_schema=False)
 
     app.mount("/static", RevalidatingStaticFiles(directory=WEB_DIR), name="static")
 

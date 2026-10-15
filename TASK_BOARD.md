@@ -342,3 +342,19 @@
   5. **Taxa dos planos grátis**: as afirmações de uma mídia são checadas em sequência (máximo 3).
   6. **C2PA**: certificados de teste/não confiáveis não invalidam a leitura (`signingCredential.untrusted` é não fatal); só a adulteração do conteúdo vira `INVALID_SIGNATURE`. Para o Antigravity: avaliar se o app deve mostrar ao cidadão quando o assinante não está numa lista de confiança.
   7. **`libmagic`** (pedido na TASK 3.1) não foi usado: a identificação de tipo é feita pelos primeiros bytes em Python puro, sem dependência de sistema.
+
+---
+
+#### Adendo 2026-10-15 (Fase 3): páginas PT/EN/FR e destaque da confiança (pedido direto do usuário)
+- **Branch**: `feat/multilingue-confiance`, criada a partir da tag `v1.3.0-rc.1` (= Fase 3 entregue, commit `cdb542e`), que preserva a versão anterior. Commit local, **sem push**. Status: `AGUARDANDO VALIDAÇÃO DO USUÁRIO`.
+- **Pedido**: (1) deixar bem visível quando a confiança é alta e o fato é verdadeiro, e de outro jeito quando é quase certo que é falso; (2) páginas de idioma separadas em inglês, francês e português para todo tipo de pesquisa.
+- **Entregue**:
+  - `/` virou a **escolha de idioma** (3 cartões; sugere o idioma do navegador). `/pt/`, `/en/` e `/fr/` são páginas completas geradas por `app/web_pages.py` a partir de `web/index.html` (modelo `{{chave}}`) e de `web/i18n/{pt,en,fr}.json` (~300 textos cada, mesmas chaves). Botões **PT · EN · FR** no topo de todas as páginas.
+  - Todo tipo de pesquisa funciona nos 3 idiomas: texto, print/foto (OCR no idioma da página), link, vídeo/áudio. A página envia `language` (novo campo opcional em `POST /api/v1/fact-check/text` e no formulário de `/media`); a explicação da IA e o texto do modo cidadão saem nesse idioma (inglês adicionado ao modo cidadão).
+  - Afirmações **em inglês sem IA**: detecção de idioma por palavras funcionais (o idioma da página desempata), palavras vazias e gatilhos de área em inglês, e as palavras da própria afirmação passam a consultar PubMed/OMS/GDELT/EUR-Lex.
+  - Notas e erros do servidor (em português) são traduzidos na página (`NOTE_RULES` no `app.js`); o resumo C2PA é montado no idioma da página a partir dos campos estruturados.
+  - **Confiança**: régua **Falso ↔ Verdadeiro** com marcador animado em todo veredito com IA. ≥ 80% em Verdadeiro/Falso/Enganoso → cartão todo colorido (verde; vermelho listrado; laranja), ícone grande e **carimbo** "CONFIRMADO" / "FALSO" / "ENGANOSO"; 55–79% → "provavelmente…"; < 55% → cartão discreto com "confiança baixa: leia as fontes". Mesma lógica na linha do tempo de mídia (pílula sólida + %), no cartão PNG e no texto do WhatsApp.
+- **Testes**: 298 passed (novo `tests/test_i18n_and_confidence.py`, 21 testes: páginas, redirecionamento `/en` → `/en/`, paridade de chaves e de `{marcadores}` entre os 3 dicionários, toda chave usada no JS/modelo existe, escape do JSON embutido, idioma da resposta no prompt e no modo cidadão, `language` na rota de mídia, detecção de idioma). `ruff` limpo.
+- **Verificado no navegador**: escolha de idioma; página EN com checagem real sem IA (PubMed + OMS, explicação em inglês); resultados simulados com IA: Falso 96% (PT), Verdadeiro 93% (EN), Enganoso 68% e Verdadeiro 40% (FR, celular, modo claro); cartão PNG em francês; laudo de mídia simulado em inglês (C2PA, alerta de transcrição, linha do tempo). Corrigida a sobreposição do seletor de idioma com a marca no celular.
+- **Não verificado**: veredito real com IA nos 3 idiomas (precisa de chave do usuário). A rota `/` deixou de abrir o app direto: quem tinha o link antigo passa pela escolha de idioma.
+- **Para o Antigravity**: a API continua devolvendo `notes` em português (a tradução é feita na página). Se terceiros forem consumir a API em outros idiomas, sugiro mover essas mensagens para um catálogo no backend.

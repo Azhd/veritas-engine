@@ -59,6 +59,13 @@ def _reference_line(item: Evidence) -> str:
     return f"Referência: {meta}\n" if meta else ""
 
 
+LANGUAGE_NAMES = {
+    "pt": "português do Brasil",
+    "en": "inglês (English)",
+    "fr": "francês (français)",
+}
+
+
 def build_verdict_prompt(
     claim: str, evidence: Sequence[tuple[str, Evidence]], language: str
 ) -> str:
@@ -76,7 +83,8 @@ def build_verdict_prompt(
     else:
         evidence_text = "(Nenhuma evidência oficial foi encontrada pelos conectores.)"
     return (
-        f"Idioma da resposta: {language}\n\n"
+        f"Idioma da resposta: {LANGUAGE_NAMES.get(language, language)}. Escreva a explicação "
+        "inteira neste idioma, mesmo que a alegação ou as evidências estejam em outro.\n\n"
         f"Alegação:\n<claim>\n{claim}\n</claim>\n\n"
         f"Evidências recuperadas:\n<evidence>\n{evidence_text}\n</evidence>"
     )
