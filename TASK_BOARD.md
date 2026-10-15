@@ -41,7 +41,7 @@
 | :--- | :--- | :--- | :--- |
 | **Fase 1** | **Fundação & Core:** Estrutura FastAPI, Router BYOK multi-provedor (Gemini, Claude, OpenAI, Groq, Ollama) | `PUBLICADA NO GITHUB` | Claude Code |
 | **Fase 2** | **Conectores de Fontes Primárias & App do Cidadão:** Módulos multidisciplinares assíncronos (`br_gov`, `fr_gov`, `science_health`, `legal_justice`, `global_geopolitics`, `climate_environment`, `web_archive`) + Modo Custo Zero + App Web (`app/web/`) | `PUBLICADA NO GITHUB` (Alpha 1.2, `v1.2.0-alpha`) | Claude Code |
-| **Fase 3** | **Pipeline Multimodal & Forense Digital:** Extração de mídia (`yt-dlp` + FFmpeg), transcrição temporal (Whisper), validação C2PA/EXIF e Dockerização | `PRONTO PARA REVISÃO DO ANTIGRAVITY` | Claude Code |
+| **Fase 3** | **Pipeline Multimodal & Forense Digital:** Extração de mídia (`yt-dlp` + FFmpeg), transcrição temporal (Whisper), validação C2PA/EXIF e Dockerização + páginas PT/EN/FR e destaque da confiança | `PUBLICADA NO GITHUB` (`main`) | Claude Code |
 | **Fase 4** | **Motor de Contexto e Adaptação de Audiência:** `verdict_engine.py` com relatórios em três modos (`general_family`, `journalism_student`, `law_academic`) | `BACKLOG` | Claude Code |
 | **Fase 5** | **Testes Alfa e Consolidação de Release:** Suíte completa de testes E2E, documentação e empacotamento da release Alpha 1.0 | `BACKLOG` | Claude Code |
 
@@ -126,7 +126,7 @@
 
 ## 🎯 FASE 3: Pipeline Multimodal & Forense Digital
 
-**Status da Fase**: `PRONTO PARA REVISÃO DO ANTIGRAVITY` (branch `feat/fase-3-forense-multimodal`, commits locais, sem push)  
+**Status da Fase**: `PUBLICADA NO GITHUB` (mesclada em `main` com as páginas PT/EN/FR e o destaque da confiança; tag de candidata `v1.3.0-rc.1`)  
 **Responsável**: Claude Code (Engenheiro Executor)  
 **Meta**: Dotar o Veritas Engine da capacidade de ingerir e periciar mídias complexas (vídeos, áudios e imagens/fotos) e URLs externas (YouTube, TikTok, X, etc.), realizando extração de áudio/frames, transcrição temporal alinhada (Whisper), perícia EXIF e validação de proveniência criptográfica (C2PA) para detecção de IA.
 
@@ -346,7 +346,7 @@
 ---
 
 #### Adendo 2026-10-15 (Fase 3): páginas PT/EN/FR e destaque da confiança (pedido direto do usuário)
-- **Branch**: `feat/multilingue-confiance`, criada a partir da tag `v1.3.0-rc.1` (= Fase 3 entregue, commit `cdb542e`), que preserva a versão anterior. Commit local, **sem push**. Status: `AGUARDANDO VALIDAÇÃO DO USUÁRIO`.
+- **Branch**: `feat/multilingue-confiance`, criada a partir da tag `v1.3.0-rc.1` (= Fase 3 entregue, commit `cdb542e`), que preserva a versão anterior. Status: `PUBLICADA NO GITHUB` (ver seção 6).
 - **Pedido**: (1) deixar bem visível quando a confiança é alta e o fato é verdadeiro, e de outro jeito quando é quase certo que é falso; (2) páginas de idioma separadas em inglês, francês e português para todo tipo de pesquisa.
 - **Entregue**:
   - `/` virou a **escolha de idioma** (3 cartões; sugere o idioma do navegador). `/pt/`, `/en/` e `/fr/` são páginas completas geradas por `app/web_pages.py` a partir de `web/index.html` (modelo `{{chave}}`) e de `web/i18n/{pt,en,fr}.json` (~300 textos cada, mesmas chaves). Botões **PT · EN · FR** no topo de todas as páginas.
@@ -358,3 +358,18 @@
 - **Verificado no navegador**: escolha de idioma; página EN com checagem real sem IA (PubMed + OMS, explicação em inglês); resultados simulados com IA: Falso 96% (PT), Verdadeiro 93% (EN), Enganoso 68% e Verdadeiro 40% (FR, celular, modo claro); cartão PNG em francês; laudo de mídia simulado em inglês (C2PA, alerta de transcrição, linha do tempo). Corrigida a sobreposição do seletor de idioma com a marca no celular.
 - **Não verificado**: veredito real com IA nos 3 idiomas (precisa de chave do usuário). A rota `/` deixou de abrir o app direto: quem tinha o link antigo passa pela escolha de idioma.
 - **Para o Antigravity**: a API continua devolvendo `notes` em português (a tradução é feita na página). Se terceiros forem consumir a API em outros idiomas, sugiro mover essas mensagens para um catálogo no backend.
+- **Correções após o teste real do usuário (Groq, página FR)**:
+  - Vereditos "Inconclusivo" e "Sem dados suficientes" não mostram mais porcentagem: a confiança do modelo nesses casos mede o quanto ele tem certeza de que *não dá para decidir*, e aparecia como "20% de confiança" ao lado de 6 fontes, parecendo baixa confiabilidade. Agora: marcador no centro da régua e "nem verdadeiro nem falso". "Sem dados suficientes" com fontes encontradas diz que as fontes não tratam diretamente da afirmação (antes dizia que nenhuma fonte foi encontrada).
+  - **EUR-Lex**: buscava a frase exata ("european copyright directive") ou palavras francesas contra títulos em inglês, e não achava a Diretiva (UE) 2019/790. Agora busca palavras (AND), remove palavras genéricas (europeia, adotada...), tenta termos em inglês e depois a língua da afirmação (títulos em FR/PT), e reduz a busca até 2 palavras no mínimo. Novo campo `language` em `EvidenceQuery`. Verificado ao vivo: "La directive européenne sur le droit d'auteur a été adoptée en 2019" → Diretiva 2019/790.
+  - Limite conhecido: "decreto secreto" (boato das patinetes) só pode ser desmentido pela ausência no Légifrance, que exige credencial PISTE gratuita (desativado sem ela).
+  - 300 testes passando.
+
+---
+
+### 6. Validação do Usuário & Publicação Remota (Fase 3 + páginas PT/EN/FR)
+
+- **Status de Publicação**: `PUBLICADA NO GITHUB` na `main`.
+- **Histórico**: o próprio usuário enviou as branches `feat/fase-3-forense-multimodal` e `feat/multilingue-confiance` e mesclou a Fase 3 + páginas PT/EN/FR na `main` (merge `4c42d63`). Depois de testar localmente com o Groq (página FR), pediu no chat em 2026-10-15: "Push sur la version stable sans ma clé api bien sûr". As correções feitas a partir desse teste (confiança dos vereditos indecisos, busca no EUR-Lex, gatilhos de clima e glossário paracetamol/gravidez) foram mescladas na `main` e enviadas.
+- **Varredura de segredos**: `.env` ignorado pelo `.gitignore`; só `backend/.env.example` (valores vazios) é versionado; nenhum padrão de chave (`gsk_`, `AIza`, `sk-ant-`, `sk-proj-`) nos commits enviados. A chave do usuário fica só no navegador/`.env` local.
+- **Aprovação do Usuário**: [x] SIM | [ ] NÃO
+- **Branch / Repositório Remoto**: `main` → https://github.com/Azhd/veritas-engine · branches preservadas: `feat/fase-3-forense-multimodal`, `feat/multilingue-confiance`.

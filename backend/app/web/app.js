@@ -111,23 +111,21 @@ const STRONG_CONFIDENCE = 0.8;
 const MEDIUM_CONFIDENCE = 0.55;
 const LEANING = { VERDADEIRO: 1, FALSO: -1, ENGANOSO: -0.5 };
 
-/** How sure the AI verdict is, and where it sits on the False ↔ True scale. Null without AI. */
+/** How sure the AI verdict is, and where it sits on the False ↔ True scale. Null without AI.
+ *
+ * Only True / False / Misleading carry a truth percentage. For "Inconclusive" and "Not enough
+ * data" the model's confidence only says how sure it is that it *cannot* decide: shown as a
+ * percentage it reads like "20% reliable", so those verdicts get the centred marker and no %. */
 function certainty(report) {
   if (!report?.ai_used) return null;
+  const lean = LEANING[report.verdict] ?? 0;
+  if (!lean) return { pct: null, tone: null, level: "neutral", text: t("cert_neutral"), position: 50, strong: false };
   const confidence = Math.max(0, Math.min(1, Number(report.confidence_score) || 0));
   const pct = Math.round(confidence * 100);
-  const lean = LEANING[report.verdict] ?? 0;
-  const tone = lean ? VERDICTS[report.verdict].tone : null;
+  const tone = VERDICTS[report.verdict].tone;
   const level = confidence >= STRONG_CONFIDENCE ? "strong" : confidence >= MEDIUM_CONFIDENCE ? "medium" : "weak";
-  let text;
-  if (!tone) text = t("cert_neutral", { pct });
-  else if (level === "weak") text = t("cert_weak", { pct });
-  else text = t(`cert_${level}_${tone}`, { pct });
-  return {
-    pct, tone, level, text,
-    position: 50 + lean * confidence * 50,
-    strong: Boolean(tone) && level === "strong",
-  };
+  const text = level === "weak" ? t("cert_weak", { pct }) : t(`cert_${level}_${tone}`, { pct });
+  return { pct, tone, level, text, position: 50 + lean * confidence * 50, strong: level === "strong" };
 }
 
 // ---------------------------------------------------------------- state & helpers
@@ -720,11 +718,11 @@ function renderVerdictCard(head, cert, stamp = null) {
   stampBox.textContent = stampText || "";
 
   const gauge = $("gauge");
-  gauge.hidden = !cert;
+  gauge.hidden = !cert || cert.pct === null;
   const scale = $("truthScale");
   scale.hidden = !cert;
   if (!cert) return;
-  $("gaugeNum").textContent = `${cert.pct}%`;
+  $("gaugeNum").textContent = cert.pct === null ? "" : `${cert.pct}%`;
   const value = $("gaugeValue");
   value.style.strokeDashoffset = "113.1";
   const marker = $("scaleMarker");
@@ -733,7 +731,7 @@ function renderVerdictCard(head, cert, stamp = null) {
   $("scaleBar").setAttribute("aria-label", `${t("scale_aria")}: ${cert.text}`);
   $("certaintyText").textContent = cert.text;
   requestAnimationFrame(() => requestAnimationFrame(() => {
-    value.style.strokeDashoffset = String(113.1 * (1 - cert.pct / 100));
+    value.style.strokeDashoffset = String(113.1 * (1 - (cert.pct ?? 0) / 100));
     marker.style.left = `${cert.position}%`;
   }));
 }
@@ -743,7 +741,11 @@ function renderReport(report) {
   $("forensicsBox").hidden = true;
   $("timelineBox").hidden = true;
   $("sourcesBox").hidden = false;
-  renderVerdictCard(verdictInfo(report.verdict), certainty(report));
+  const head = verdictInfo(report.verdict);
+  if (report.verdict === "SEM_DADOS_SUFICIENTES" && report.primary_sources?.length) {
+    head.meaning = t("v_no_data_meaning_sources"); // sources were found, they just don't answer
+  }
+  renderVerdictCard(head, certainty(report));
   renderAlerts(report);
   $("claimQuote").textContent = `“${report.claim}”`;
   renderExplanation(report.explanation || "");
@@ -1044,7 +1046,7 @@ function renderTimeline(checks) {
     el("span", { class: "tl-quote", text: `“${check.quote}”` }),
     el("span", {
       class: `pill tone-${verdict.tone}${cert?.strong ? " strong" : ""}`,
-      text: cert ? `${verdict.label} · ${cert.pct}%` : verdict.label,
+      text: cert?.pct != null ? `${verdict.label} · ${cert.pct}%` : verdict.label,
     }));
     list.append(el("li", { class: "tl-item", style: `--i: ${index}` }, button, detail));
   });
@@ -1220,7 +1222,7 @@ function stripRefs(text) {
 /** "(high confidence, 92%)" next to a verdict, or "" without AI. */
 function confidenceSuffix(report) {
   const cert = certainty(report);
-  return cert ? ` (${t(`level_${cert.tone ? cert.level : "weak"}`)}, ${cert.pct}%)` : "";
+  return cert?.pct != null ? ` (${t(`level_${cert.level}`)}, ${cert.pct}%)` : "";
 }
 
 function mediaShareText() {

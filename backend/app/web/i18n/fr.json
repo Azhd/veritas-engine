@@ -117,7 +117,7 @@
     "cert_medium_false": "Probablement faux ({pct} % de confiance).",
     "cert_medium_warn": "Probablement trompeur ({pct} % de confiance).",
     "cert_weak": "Confiance faible ({pct} %) : lisez les sources avant de conclure.",
-    "cert_neutral": "Les sources ne permettent pas de trancher ({pct} % de confiance).",
+    "cert_neutral": "Ni vrai ni faux : les sources trouvées ne permettent pas de trancher. Il n'y a pas de pourcentage de véracité dans ce cas.",
     "level_strong": "confiance élevée",
     "level_medium": "confiance moyenne",
     "level_weak": "confiance faible",
@@ -150,6 +150,7 @@
     "v_inconclusive_meaning": "Les sources trouvées ne permettent pas de conclure avec certitude.",
     "v_no_data": "Données insuffisantes",
     "v_no_data_meaning": "Nous n'avons trouvé aucune donnée officielle sur ce sujet.",
+    "v_no_data_meaning_sources": "Les sources officielles trouvées ne traitent pas directement de cette affirmation.",
     "v_raw": "Voir les sources officielles",
     "v_raw_meaning": "Nous avons réuni ce que disent les sources officielles. Lisez-les et faites-vous votre avis.",
 

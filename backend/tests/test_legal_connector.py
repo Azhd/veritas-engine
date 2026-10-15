@@ -219,7 +219,7 @@ class TestEurLex:
         request = seen[0]
         assert request.headers["Accept"] == "application/sparql-results+json"
         query = request.url.params["query"]
-        assert "?title bif:contains '\"artificial intelligence\"'" in query
+        assert '?title bif:contains \'"artificial" AND "intelligence"\'' in query
         assert "ORDER BY DESC(?date)" in query
         item = evidence[0]
         assert item.country is Country.EU
@@ -239,25 +239,61 @@ class TestEurLex:
         await conn.search_acts(['ai")) } DROP ALL #', "x"])
         query = seen[0]
         # Quotes, braces and noise words are stripped before reaching the text index.
-        assert "?title bif:contains '\"drop all\"'" in query
-        assert query.count("'") == 2 and query.count('"') == 4
-        assert len(seen) == 1
+        assert '?title bif:contains \'"drop" AND "all"\'' in query
+        assert query.count("'") == 2 and query.count('"') == 6
+        assert len(seen) == 1  # never down to a single word
 
-    async def test_two_terms_fall_back_to_first_when_empty(self):
+    async def test_words_are_dropped_until_titles_match(self):
+        seen = []
+
+        def handler(request):
+            query = request.url.params["query"]
+            seen.append(query.split("bif:contains ")[1].split("\n")[0])
+            if '"artificial"' in query:  # too specific for any title
+                return json_response({"results": {"bindings": []}})
+            return json_response(SPARQL_RESULT)
+
+        conn = EurLexConnector(mock_client(handler))
+        acts = await conn.search_acts(["artificial intelligence", "European liability"])
+        assert seen == [
+            '\'"artificial" AND "intelligence" AND "liability"\' .',
+            '\'"intelligence" AND "liability"\' .',
+        ]
+        assert acts[0]["celex"] == "32024R1689"
+
+    async def test_french_claim_without_english_terms_searches_french_titles(self):
+        seen = []
+
+        def handler(request):
+            seen.append(request.url.params["query"])
+            return json_response(SPARQL_RESULT)
+
+        conn = EurLexConnector(mock_client(handler))
+        query = EvidenceQuery(
+            keywords=["européenne", "directive", "auteur", "droit"], language="fr"
+        )
+        evidence = await conn.search_evidence(query)
+        assert len(seen) == 1 and evidence
+        assert '\'"directive" AND "auteur" AND "droit"\'' in seen[0]  # generic word dropped
+        assert "language/FRA" in seen[0]
+
+    async def test_english_terms_first_then_claim_language(self):
         seen = []
 
         def handler(request):
             query = request.url.params["query"]
             seen.append(query)
-            if " AND " in query:
+            if "language/ENG" in query:
                 return json_response({"results": {"bindings": []}})
             return json_response(SPARQL_RESULT)
 
         conn = EurLexConnector(mock_client(handler))
-        acts = await conn.search_acts(["artificial intelligence", "liability"])
-        assert '\'"artificial intelligence" AND "liability"\'' in seen[0]
-        assert "AND" not in seen[1].split("bif:contains")[1].split("\n")[0]
-        assert acts[0]["celex"] == "32024R1689"
+        query = EvidenceQuery(
+            keywords=["direitos", "autorais"], keywords_en=["copyright"], language="pt"
+        )
+        evidence = await conn.search_evidence(query)
+        assert "language/ENG" in seen[0] and "language/POR" in seen[-1]
+        assert evidence
 
     def test_build_query_limit(self):
         assert build_eurlex_query(["x y"], limit=3).rstrip().endswith("LIMIT 3")

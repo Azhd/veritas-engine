@@ -291,6 +291,18 @@ def build_eurlex_query(terms: list[str], *, limit: int, language: str = "ENG") -
     )
 
 
+#: EUR-Lex title languages for the claim languages Veritas understands.
+_EURLEX_LANGUAGES = {"en": "ENG", "fr": "FRA", "pt": "POR"}
+#: Words in almost every EU act title, or verbs of the claim: they never narrow a search.
+_EURLEX_GENERIC = {
+    "european", "europe", "union", "adopted", "approved", "published", "new", "law", "official",
+    "européenne", "européen", "adoptée", "adopté", "publiée", "nouvelle", "loi", "officiel",
+    "europeia", "europeu", "união", "adotada", "aprovada", "publicada", "nova", "novo", "lei",
+}  # fmt: skip
+#: Most words AND-ed in one query; more makes titles impossible to match.
+_EURLEX_MAX_WORDS = 4
+
+
 class EurLexConnector(BaseGovConnector):
     source_id = "eu.eurlex"
     country = Country.EU
@@ -298,22 +310,35 @@ class EurLexConnector(BaseGovConnector):
     base_url = "https://publications.europa.eu/webapi/rdf/sparql"
     domains = frozenset({Domain.LEGAL_JUSTICE})
 
-    async def search_acts(self, terms: list[str], *, limit: int = 5) -> list[dict[str, str]]:
-        safe = [" ".join(_SPARQL_SAFE.sub(" ", t).lower().split()) for t in terms]
-        # Virtuoso's text index rejects very short (noise) words.
-        safe = [" ".join(w for w in t.split() if len(w) > 2) for t in safe]
-        safe = [t for t in safe if t][:2]
-        if not safe:
-            return []
-        acts = await self._query(safe, limit)
-        if not acts and len(safe) > 1:
-            acts = await self._query(safe[:1], limit)  # AND of two phrases was too strict
-        return acts
+    async def search_acts(
+        self, terms: list[str], *, limit: int = 5, language: str = "ENG"
+    ) -> list[dict[str, str]]:
+        """Acts whose title (in ``language``) contains all the distinctive words of ``terms``.
 
-    async def _query(self, terms: list[str], limit: int) -> list[dict[str, str]]:
+        Words, not phrases: official titles never repeat a claim's wording ("European copyright
+        directive" vs "Directive (EU) 2019/790 ... on copyright"). When nothing matches, the
+        first (longest) word is dropped, down to two words, so a search never degrades into a
+        single common word that matches unrelated acts.
+        """
+        words: list[str] = []
+        for term in terms:
+            for word in _SPARQL_SAFE.sub(" ", term).lower().split():
+                # Virtuoso's text index rejects very short (noise) words.
+                if len(word) > 2 and word not in _EURLEX_GENERIC and word not in words:
+                    words.append(word)
+        words = words[:_EURLEX_MAX_WORDS]
+        minimum = min(2, len(words))
+        while words and len(words) >= minimum:
+            acts = await self._query(words, limit, language)
+            if acts:
+                return acts
+            words = words[1:]
+        return []
+
+    async def _query(self, terms: list[str], limit: int, language: str) -> list[dict[str, str]]:
         payload = await self._request(
             self.base_url,
-            {"query": build_eurlex_query(terms, limit=limit)},
+            {"query": build_eurlex_query(terms, limit=limit, language=language)},
             headers={"Accept": "application/sparql-results+json"},
         )
         results = payload.get("results") if isinstance(payload, dict) else None
@@ -321,9 +346,19 @@ class EurLexConnector(BaseGovConnector):
         return [{k: v.get("value", "") for k, v in row.items()} for row in bindings]
 
     async def search_evidence(self, query: EvidenceQuery) -> list[Evidence]:
-        terms = query.keywords_en or query.keywords
+        # English terms first; then the claim's own words against titles in its language
+        # (a French claim without AI has no English terms, and French titles match it).
+        attempts = [(query.keywords_en, "ENG")]
+        if query.language != "en":
+            attempts.append((query.keywords, _EURLEX_LANGUAGES.get(query.language, "ENG")))
+        acts: list[dict[str, str]] = []
+        for terms, language in attempts:
+            if terms:
+                acts = await self.search_acts(terms, limit=query.max_results, language=language)
+            if acts:
+                break
         evidence = []
-        for act in await self.search_acts(terms, limit=query.max_results):
+        for act in acts:
             celex = act.get("celex", "")
             act_type = _CELEX_TYPES.get(celex[5:6], "Ato jurídico") if len(celex) > 5 else "Ato"
             evidence.append(
