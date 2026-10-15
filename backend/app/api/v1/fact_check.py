@@ -4,11 +4,22 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, File, Form, UploadFile
 
-from app.api.deps import ProviderSelection, get_fact_check_service, get_optional_llm_provider
-from app.schemas.fact_check import FactCheckReport, TextFactCheckRequest
+from app.api.deps import (
+    ProviderSelection,
+    get_fact_check_service,
+    get_media_check_service,
+    get_optional_llm_provider,
+)
+from app.schemas.fact_check import (
+    CountryContext,
+    FactCheckReport,
+    MediaFactCheckReport,
+    TextFactCheckRequest,
+)
 from app.services.fact_checker import FactCheckService
+from app.services.media_checker import MediaCheckService
 
 router = APIRouter(prefix="/fact-check", tags=["fact-check"])
 
@@ -100,4 +111,36 @@ async def fact_check_text(
         country_override=body.country,
         notes=selection.notes,
         source_url=body.source_url,
+    )
+
+
+@router.post(
+    "/media",
+    response_model=MediaFactCheckReport,
+    summary="Verifica vídeo, áudio ou imagem (arquivo ou link): perícia + afirmações com minutagem",
+    description=(
+        "Envie **um arquivo** (até 50 MB) **ou um link** (YouTube, TikTok, X, Instagram ou link "
+        "direto de mídia). O Veritas calcula a impressão digital (SHA-256), lê os metadados "
+        "(EXIF), verifica credenciais de conteúdo (C2PA: gerada por IA? câmera?), extrai "
+        "quadros-chave, transcreve a fala com minutagem e checa as afirmações nas fontes "
+        "oficiais. Com uma chave gratuita do Groq ou do Gemini, a transcrição usa a mesma chave."
+    ),
+)
+async def fact_check_media(
+    selection: Annotated[ProviderSelection, Depends(get_optional_llm_provider)],
+    service: Annotated[MediaCheckService, Depends(get_media_check_service)],
+    file: Annotated[UploadFile | None, File(description="Vídeo, áudio ou imagem.")] = None,
+    url: Annotated[str | None, Form(description="Ou o link da mídia.")] = None,
+    claim: Annotated[
+        str | None, Form(max_length=5000, description="Texto que acompanha a mídia (opcional).")
+    ] = None,
+    country: Annotated[CountryContext | None, Form()] = None,
+) -> MediaFactCheckReport:
+    return await service.check(
+        selection.provider,
+        upload=file,
+        url=(url or "").strip() or None,
+        claim=claim,
+        country=country,
+        notes=selection.notes,
     )

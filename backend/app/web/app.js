@@ -7,6 +7,10 @@
 const API = "/api/v1/fact-check/text";
 const TESSERACT_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
 const REQUEST_TIMEOUT_MS = 90_000;
+const MEDIA_API = "/api/v1/fact-check/media";
+const MEDIA_TIMEOUT_MS = 240_000; // download + transcription + several checks
+const MEDIA_MAX_BYTES = 50 * 1024 * 1024;
+const VIDEO_LINK = /(youtube\.com|youtu\.be|tiktok\.com|instagram\.com|(\/\/|\.)x\.com|twitter\.com|facebook\.com|fb\.watch|kwai|vimeo\.com|dailymotion\.com|\.(mp4|mov|webm|mkv|mp3|m4a|wav|ogg|opus|jpe?g|png|webp)(\?|$))/i;
 
 // ---------------------------------------------------------------- knowledge areas
 const ICONS = {
@@ -25,6 +29,8 @@ const ICONS = {
   question: "M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 4.5M12 17.5v.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z",
   book: "M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5zm0 15A2.5 2.5 0 0 0 6.5 23H20v-5",
   external: "M14 4h6v6m0-6-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5",
+  video: "M4 6h11a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zm12 4 5-3v10l-5-3",
+  mic: "M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3",
   translate: "M4 5h9M8.5 3v2m3 0c-.8 4-3.6 7.3-7 9m2-6c1.2 2.4 3.3 4.5 6 5.5M13 21l4.5-10L22 21m-7.5-3h6",
 };
 
@@ -70,6 +76,18 @@ const VERDICTS = {
     meaning: "Reunimos o que as fontes oficiais dizem. Leia e tire sua conclusão." },
 };
 
+const C2PA_LABELS = {
+  AI_GENERATED: { label: "Gerada por IA", tone: "false" },
+  AI_EDITED: { label: "Editada com IA", tone: "warn" },
+  CAMERA_CAPTURE: { label: "Captura de câmera", tone: "true" },
+  EDITED: { label: "Foto/vídeo editado", tone: "warn" },
+  SIGNED_UNKNOWN: { label: "Assinada, origem não declarada", tone: "neutral" },
+  INVALID_SIGNATURE: { label: "Alterada depois de assinada", tone: "false" },
+  NO_MANIFEST: { label: "Ausentes", tone: "neutral" },
+  UNAVAILABLE: { label: "Verificação indisponível", tone: "neutral" },
+};
+const VERDICT_SEVERITY = ["FALSO", "ENGANOSO", "INCONCLUSIVO", "SEM_DADOS_SUFICIENTES", "VERDADEIRO", "SEM_CHAVE_IA_DADOS_BRUTOS"];
+
 const EXAMPLES = [
   { area: "science", text: "Vacinas causam autismo em crianças." },
   { area: "stats", text: "A inflação no Brasil passou de 10% nos últimos 12 meses." },
@@ -91,7 +109,10 @@ const FALLBACK_PROVIDERS = [
 const PROVIDER_NAMES = { gemini: "Google Gemini", groq: "Groq", ollama: "Ollama (no seu PC)", anthropic: "Claude", openai: "OpenAI" };
 
 // ---------------------------------------------------------------- state & helpers
-const state = { ai: null, selected: "gemini", providers: [], report: null, filter: null, lastBody: null };
+const state = {
+  ai: null, selected: "gemini", providers: [], report: null, filter: null,
+  lastRequest: null, mediaFile: null, media: null,
+};
 const $ = (id) => document.getElementById(id);
 
 function el(tag, attrs = {}, ...children) {
@@ -461,17 +482,59 @@ async function readImage(file) {
   }
 }
 
+function formatBytes(bytes) {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function clearMedia() {
+  state.mediaFile = null;
+  $("imagePreview").hidden = true;
+  $("imageInput").value = "";
+  $("mediaIcon").hidden = true;
+  $("imageThumb").hidden = false;
+}
+
+/** Any media file: images also get OCR; video/audio are sent for forensics and transcription. */
+function handleFile(file) {
+  if (!file) return;
+  const kind = file.type.split("/")[0];
+  if (!["image", "video", "audio"].includes(kind)) {
+    toast("Envie uma foto, um vídeo ou um áudio.");
+    return;
+  }
+  if (file.size > MEDIA_MAX_BYTES) {
+    toast(`Arquivo muito grande (${formatBytes(file.size)}). O limite é 50 MB.`);
+    return;
+  }
+  state.mediaFile = file;
+  if (kind === "image") {
+    $("mediaIcon").hidden = true;
+    $("imageThumb").hidden = false;
+    readImage(file);
+    return;
+  }
+  const preview = $("imagePreview");
+  preview.hidden = false;
+  preview.classList.add("done");
+  $("imageThumb").hidden = true;
+  const iconBox = $("mediaIcon");
+  iconBox.hidden = false;
+  iconBox.replaceChildren(icon(kind === "video" ? "video" : "mic"));
+  $("ocrTitle").textContent = `${file.name} · ${formatBytes(file.size)}`;
+  $("ocrHint").textContent = kind === "video"
+    ? "Vamos periciar o vídeo e checar o que é dito nele. Escreva acima o contexto, se quiser."
+    : "Vamos transcrever o áudio e checar o que é dito. Escreva acima o contexto, se quiser.";
+}
+
 function setupImageInput() {
-  $("imageInput").addEventListener("change", (event) => readImage(event.target.files[0]));
-  $("removeImage").addEventListener("click", () => {
-    $("imagePreview").hidden = true;
-    $("imageInput").value = "";
-  });
+  $("imageInput").addEventListener("change", (event) => handleFile(event.target.files[0]));
+  $("removeImage").addEventListener("click", clearMedia);
   $("claim").addEventListener("paste", (event) => {
     const item = [...(event.clipboardData?.items || [])].find((i) => i.type.startsWith("image/"));
     if (item) {
       event.preventDefault();
-      readImage(item.getAsFile());
+      handleFile(item.getAsFile());
     }
   });
   const zone = $("dropZone");
@@ -480,8 +543,8 @@ function setupImageInput() {
   zone.addEventListener("drop", (event) => {
     event.preventDefault();
     zone.classList.remove("dragging");
-    const file = [...(event.dataTransfer?.files || [])].find((f) => f.type.startsWith("image/"));
-    if (file) readImage(file);
+    const file = [...(event.dataTransfer?.files || [])].find((f) => /^(image|video|audio)\//.test(f.type));
+    if (file) handleFile(file);
   });
 }
 
@@ -494,7 +557,7 @@ const LOADING_TEXTS = [
   "Organizando as evidências…",
 ];
 
-function startLoading() {
+function startLoading(texts = LOADING_TEXTS) {
   showState("loading");
   const items = [...document.querySelectorAll("#radarAreas li")];
   items.forEach((li) => li.classList.remove("lit"));
@@ -502,7 +565,7 @@ function startLoading() {
   clearInterval(radarTimer);
   radarTimer = setInterval(() => {
     items.forEach((li, index) => li.classList.toggle("lit", (tick + index) % 3 === 0));
-    $("loadingText").textContent = LOADING_TEXTS[Math.floor(tick / 3) % LOADING_TEXTS.length];
+    $("loadingText").textContent = texts[Math.floor(tick / 3) % texts.length];
     tick += 1;
   }, 700);
 }
@@ -516,6 +579,24 @@ async function submit(event) {
   const claim = $("claim").value.trim();
   const error = $("formError");
   error.hidden = true;
+  const linkRaw = $("sourceUrl").value.trim();
+  const link = linkRaw ? safeUrl(/^https?:\/\//i.test(linkRaw) ? linkRaw : `https://${linkRaw}`) : null;
+  if (linkRaw && !link) {
+    error.textContent = "O link não parece válido.";
+    error.hidden = false;
+    return;
+  }
+  const country = document.querySelector('input[name="country"]:checked').value;
+  if (state.mediaFile || (link && VIDEO_LINK.test(link))) {
+    const form = new FormData();
+    if (state.mediaFile) form.append("file", state.mediaFile, state.mediaFile.name);
+    else form.append("url", link);
+    if (claim) form.append("claim", claim);
+    if (country) form.append("country", country);
+    state.lastRequest = () => runMedia(form);
+    await runMedia(form);
+    return;
+  }
   if (claim.length < 5) {
     error.textContent = "Escreva ou cole a afirmação que você quer verificar.";
     error.hidden = false;
@@ -523,20 +604,52 @@ async function submit(event) {
     return;
   }
   const body = { claim };
-  const country = document.querySelector('input[name="country"]:checked').value;
   if (country) body.country = country;
-  const sourceUrl = $("sourceUrl").value.trim();
-  if (sourceUrl) {
-    const normalized = safeUrl(/^https?:\/\//i.test(sourceUrl) ? sourceUrl : `https://${sourceUrl}`);
-    if (!normalized) {
-      error.textContent = "O link da fonte não parece válido.";
-      error.hidden = false;
-      return;
-    }
-    body.source_url = normalized;
-  }
-  state.lastBody = body;
+  if (link) body.source_url = link;
+  state.lastRequest = () => run(body);
   await run(body);
+}
+
+const MEDIA_LOADING_TEXTS = [
+  "Recebendo a mídia…",
+  "Lendo metadados e credenciais de conteúdo…",
+  "Extraindo áudio e quadros do vídeo…",
+  "Transcrevendo o que é dito…",
+  "Checando as afirmações nas fontes oficiais…",
+];
+
+async function runMedia(form) {
+  const headers = state.ai ? aiHeaders(state.ai) : {};
+  const button = $("submitBtn");
+  button.disabled = true;
+  button.classList.add("busy");
+  startLoading(MEDIA_LOADING_TEXTS);
+  if (window.matchMedia("(max-width: 960px)").matches) {
+    $("resultPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), MEDIA_TIMEOUT_MS);
+  try {
+    const response = await fetch(MEDIA_API, { method: "POST", headers, body: form, signal: controller.signal });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data) {
+      throw new Error(data?.error?.message || `Erro ${response.status}`);
+    }
+    state.media = data;
+    state.report = data.checks?.[0]?.report || null;
+    state.filter = null;
+    renderMediaReport(data);
+  } catch (err) {
+    stopLoading();
+    $("errorText").textContent = err.name === "AbortError"
+      ? "A análise da mídia demorou demais. Tente um arquivo menor ou um trecho mais curto."
+      : err.message;
+    showState("error");
+  } finally {
+    clearTimeout(timeout);
+    button.disabled = false;
+    button.classList.remove("busy");
+  }
 }
 
 async function run(body) {
@@ -561,6 +674,7 @@ async function run(body) {
       throw new Error(detail || `Erro ${response.status}`);
     }
     state.report = data;
+    state.media = null;
     state.filter = null;
     renderReport(data);
   } catch (err) {
@@ -579,6 +693,9 @@ async function run(body) {
 // ---------------------------------------------------------------- result
 function renderReport(report) {
   stopLoading();
+  $("forensicsBox").hidden = true;
+  $("timelineBox").hidden = true;
+  $("sourcesBox").hidden = false;
   const verdict = VERDICTS[report.verdict] || VERDICTS.INCONCLUSIVO;
   const card = $("verdictCard");
   card.dataset.tone = verdict.tone;
@@ -721,6 +838,169 @@ function sourceCard(source, index) {
   }, areaIcon(area), body);
 }
 
+// ---------------------------------------------------------------- media report
+function mediaHeadline(data) {
+  const c2pa = data.forensics?.c2pa;
+  if (c2pa && ["AI_GENERATED", "AI_EDITED", "INVALID_SIGNATURE"].includes(c2pa.verdict)) {
+    const info = C2PA_LABELS[c2pa.verdict];
+    return { label: info.label, tone: info.tone, icon: "alert", meaning: c2pa.summary };
+  }
+  const verdicts = (data.checks || []).map((c) => c.report.verdict);
+  const worst = VERDICT_SEVERITY.find((v) => verdicts.includes(v));
+  if (worst && worst !== "SEM_CHAVE_IA_DADOS_BRUTOS") {
+    const base = VERDICTS[worst];
+    const count = verdicts.length;
+    const headlines = {
+      FALSO: "Contém afirmação falsa",
+      ENGANOSO: "Contém afirmação enganosa",
+      INCONCLUSIVO: "Afirmações inconclusivas",
+      SEM_DADOS_SUFICIENTES: "Sem dados suficientes",
+      VERDADEIRO: count === 1 ? "Afirmação confirmada" : "Afirmações confirmadas",
+    };
+    const meaning = worst === "VERDADEIRO"
+      ? (count === 1
+        ? "A afirmação checada confere com as fontes oficiais."
+        : `As ${count} afirmações checadas conferem com as fontes oficiais.`)
+      : `${count === 1 ? "A afirmação checada" : `Pelo menos uma das ${count} afirmações checadas`} foi classificada como “${base.label}”.`;
+    return { label: headlines[worst], tone: base.tone, icon: base.icon, meaning };
+  }
+  return {
+    label: "Perícia concluída", tone: "info", icon: "book",
+    meaning: verdicts.length
+      ? "Reunimos a perícia da mídia e as fontes oficiais das afirmações encontradas."
+      : "Veja abaixo o que a perícia encontrou na mídia.",
+  };
+}
+
+function renderMediaReport(data) {
+  stopLoading();
+  const head = mediaHeadline(data);
+  $("verdictCard").dataset.tone = head.tone;
+  $("verdictIcon").replaceChildren(icon(head.icon));
+  $("verdictLabel").textContent = head.label;
+  $("verdictMeaning").textContent = head.meaning;
+  $("gauge").hidden = true;
+
+  const f = data.forensics;
+  renderAlerts({ notes: data.notes || [] });
+  $("claimQuote").textContent = f.source_url || f.filename || "Mídia enviada";
+  $("explanation").replaceChildren(mediaSummary(data));
+  const transcriptTip = (data.notes || []).some((n) => TRANSCRIPT_PREFIXES.some((p) => n.startsWith(p)));
+  $("ctaAi").hidden = data.ai_used || Boolean(state.ai) || transcriptTip;
+
+  renderForensics(f);
+  renderTimeline(data.checks || []);
+  $("sourcesBox").hidden = true;
+  renderNotes({ notes: [...(data.notes || []), ...(f.warnings || [])], connector_failures: [] });
+  showState("result");
+}
+
+function mediaSummary(data) {
+  const f = data.forensics;
+  const kinds = { image: "Imagem", video: "Vídeo", audio: "Áudio", unknown: "Arquivo" };
+  const parts = [`${kinds[f.kind] || "Mídia"} de ${formatBytes(f.size_bytes)}`];
+  if (f.exif?.duration_seconds) parts.push(`com ${Math.round(f.exif.duration_seconds)} s`);
+  let text = `${parts.join(" ")}. `;
+  if (f.transcript?.segments?.length) {
+    const segments = f.transcript.segments.length;
+    const timed = data.checks.filter((c) => c.start_time !== null).length;
+    text += `A fala foi transcrita (${segments} ${segments === 1 ? "trecho" : "trechos"}) e `;
+    text += timed === 0
+      ? "nenhuma afirmação verificável foi encontrada. "
+      : `${timed} ${timed === 1 ? "afirmação verificável foi checada" : "afirmações verificáveis foram checadas"}. `;
+  } else if (f.kind === "video" || f.kind === "audio") {
+    text += "A fala não foi transcrita (veja o aviso acima). ";
+  }
+  // The C2PA finding is in the headline (when decisive) and in the forensics table.
+  if (f.c2pa && ["CAMERA_CAPTURE", "EDITED", "SIGNED_UNKNOWN"].includes(f.c2pa.verdict)) {
+    text += f.c2pa.summary;
+  }
+  return text.trim();
+}
+
+function forensicRow(label, value, tone) {
+  return el("div", { class: "frow" },
+    el("span", { class: "flabel", text: label }),
+    el("span", { class: `fvalue${tone ? ` tone-${tone}` : ""}` }, value));
+}
+
+function renderForensics(f) {
+  const grid = $("forensicGrid");
+  grid.replaceChildren();
+  if (f.c2pa) {
+    const info = C2PA_LABELS[f.c2pa.verdict] || C2PA_LABELS.NO_MANIFEST;
+    grid.append(forensicRow("Credenciais de conteúdo (C2PA)",
+      el("span", {}, el("span", { class: `pill tone-${info.tone}`, text: info.label }), " ", f.c2pa.summary)));
+  }
+  const exif = f.exif;
+  if (exif?.camera) grid.append(forensicRow("Câmera", exif.camera));
+  if (exif?.captured_at) grid.append(forensicRow("Data de captura", exif.captured_at));
+  if (exif?.software) grid.append(forensicRow("Software", exif.software, "warn"));
+  if (exif?.gps) {
+    const { latitude: lat, longitude: lon } = exif.gps;
+    grid.append(forensicRow("Local (GPS)",
+      el("a", { href: `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=15/${lat}/${lon}`, target: "_blank", rel: "noopener noreferrer", text: `${lat}, ${lon} ↗` })));
+  }
+  if (exif?.duration_seconds) {
+    const total = Math.round(exif.duration_seconds);
+    grid.append(forensicRow("Duração", `${Math.floor(total / 60)} min ${String(total % 60).padStart(2, "0")} s`));
+  }
+  if (exif?.width && exif?.height) grid.append(forensicRow("Dimensões", `${exif.width} × ${exif.height} px`));
+  for (const warning of exif?.warnings || []) grid.append(forensicRow("Atenção", warning, "warn"));
+  if (f.transcript?.engine && f.transcript.engine !== "none") {
+    const engines = { groq_whisper: "Whisper (Groq)", openai_whisper: "Whisper (OpenAI)", gemini: "Gemini", whisper_local: "Whisper no seu computador" };
+    grid.append(forensicRow("Transcrição", engines[f.transcript.engine] || f.transcript.engine));
+  }
+  grid.append(forensicRow("Impressão digital (SHA-256)", el("code", { class: "hash", title: f.sha256, text: `${f.sha256.slice(0, 16)}…` })));
+  for (const missing of f.capabilities_missing || []) grid.append(forensicRow("Não verificado", missing, "neutral"));
+
+  const frames = $("keyframes");
+  frames.replaceChildren();
+  for (const frame of f.keyframes || []) {
+    if (!String(frame.data_url).startsWith("data:image/jpeg;base64,")) continue;
+    const minutes = Math.floor(frame.time_seconds / 60);
+    const seconds = String(Math.floor(frame.time_seconds % 60)).padStart(2, "0");
+    frames.append(el("figure", {},
+      el("img", { src: frame.data_url, alt: `Quadro do vídeo em ${minutes}:${seconds}`, loading: "lazy" }),
+      el("figcaption", { text: `${minutes}:${seconds}` })));
+  }
+  $("forensicsBox").hidden = false;
+}
+
+function renderTimeline(checks) {
+  const list = $("timelineList");
+  list.replaceChildren();
+  $("timelineBox").hidden = checks.length === 0;
+  checks.forEach((check, index) => {
+    const verdict = VERDICTS[check.report.verdict] || VERDICTS.INCONCLUSIVO;
+    const detail = el("div", { class: "tl-detail", hidden: true });
+    const button = el("button", {
+      type: "button", class: "tl-head", "aria-expanded": "false",
+      onclick: () => {
+        const open = detail.hidden;
+        detail.hidden = !open;
+        button.setAttribute("aria-expanded", String(open));
+        if (open && !detail.childElementCount) detail.append(...timelineDetail(check.report));
+      },
+    },
+    el("span", { class: "tl-time", text: check.label }),
+    el("span", { class: "tl-quote", text: `“${check.quote}”` }),
+    el("span", { class: `pill tone-${verdict.tone}`, text: verdict.label }));
+    list.append(el("li", { class: "tl-item", style: `--i: ${index}` }, button, detail));
+  });
+}
+
+function timelineDetail(report) {
+  const nodes = [];
+  if (report.claim) nodes.push(el("p", { class: "tl-claim" }, el("b", { text: "Afirmação checada: " }), report.claim));
+  nodes.push(el("p", { class: "tl-explanation", text: stripRefs(report.explanation) }));
+  const sources = (report.primary_sources || []).slice(0, 3);
+  if (sources.length) {
+    nodes.push(el("ol", { class: "source-list" }, sources.map((s, i) => sourceCard(s, i))));
+  }
+  return nodes;
+}
+
 // ---------------------------------------------------------------- translation
 async function translateText(text, from) {
   // On-device, free and private when the browser ships a translator (Chrome 138+).
@@ -774,6 +1054,7 @@ async function translateSource(button, source, lang) {
 
 // ---------------------------------------------------------------- alerts & notes
 const VAGUE_PREFIX = "A afirmação não diz onde";
+const TRANSCRIPT_PREFIXES = ["Sem transcrição", "A transcrição falhou", "Whisper local falhou"];
 const AI_FAILURE_PREFIXES = ["IA indisponível", "Configuração de IA"];
 
 function renderAlerts(report) {
@@ -791,6 +1072,16 @@ function renderAlerts(report) {
           onclick: () => { $("aiPanel").open = true; $("aiPanel").scrollIntoView({ behavior: "smooth", block: "center" }); },
         }))));
   }
+  const transcriptNote = notes.find((n) => TRANSCRIPT_PREFIXES.some((p) => n.startsWith(p)));
+  if (transcriptNote) {
+    box.append(el("div", { class: "alert tip" }, icon("mic"),
+      el("div", {}, el("b", { text: "A fala não foi transcrita" }),
+        el("p", { text: friendlyAiError(transcriptNote, state.ai?.provider) }),
+        el("button", {
+          type: "button", class: "link-btn", text: "Ativar IA grátis",
+          onclick: () => { $("aiPanel").open = true; $("aiPanel").scrollIntoView({ behavior: "smooth", block: "center" }); },
+        }))));
+  }
   const vague = notes.find((n) => n.startsWith(VAGUE_PREFIX));
   if (vague) {
     box.append(el("div", { class: "alert tip" }, icon("bulb"),
@@ -799,7 +1090,7 @@ function renderAlerts(report) {
 }
 
 function renderNotes(report) {
-  const hidden = [VAGUE_PREFIX, ...AI_FAILURE_PREFIXES];
+  const hidden = [VAGUE_PREFIX, ...AI_FAILURE_PREFIXES, ...TRANSCRIPT_PREFIXES];
   const notes = (report.notes || []).filter((n) => !hidden.some((p) => n.startsWith(p)));
   for (const failure of report.connector_failures || []) {
     const area = CONNECTORS[failure.connector]?.[0];
@@ -816,7 +1107,21 @@ function stripRefs(text) {
   return (text || "").replace(/\s*\[E\d+\]/g, "").replace(/\s{2,}/g, " ").trim();
 }
 
+function mediaShareText() {
+  const data = state.media;
+  const head = mediaHeadline(data);
+  const lines = [`🔎 *${head.label}*`, head.meaning, ""];
+  for (const check of data.checks || []) {
+    const verdict = VERDICTS[check.report.verdict] || VERDICTS.INCONCLUSIVO;
+    lines.push(`${verdict.emoji} ${check.label}: “${check.quote.slice(0, 140)}” → ${verdict.label}`);
+  }
+  if (data.forensics?.c2pa) lines.push("", `Credenciais de conteúdo: ${data.forensics.c2pa.summary}`);
+  lines.push("", "Verificado com o Veritas · verifique antes de compartilhar");
+  return lines.join("\n");
+}
+
 function shareText() {
+  if (state.media) return mediaShareText();
   const report = state.report;
   const verdict = VERDICTS[report.verdict] || VERDICTS.INCONCLUSIVO;
   const lines = [
@@ -951,6 +1256,7 @@ function wrap(ctx, text, x, y, maxWidth, lineHeight, maxLines) {
 }
 
 async function downloadImage() {
+  if (!state.report) return toast("Não há afirmação checada para gerar o cartão.");
   const canvas = drawShareCard();
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
   if (!blob) return toast("Não foi possível gerar a imagem.");
@@ -1008,12 +1314,13 @@ function init() {
   $("newBtn").addEventListener("click", () => {
     $("claim").value = "";
     $("sourceUrl").value = "";
-    $("imagePreview").hidden = true;
+    clearMedia();
+    state.media = null;
     updateCounter();
     showState("empty");
     $("claim").focus();
   });
-  $("retryBtn").addEventListener("click", () => state.lastBody && run(state.lastBody));
+  $("retryBtn").addEventListener("click", () => state.lastRequest && state.lastRequest());
 }
 
 document.addEventListener("DOMContentLoaded", init);

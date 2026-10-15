@@ -27,6 +27,7 @@ from app.core.errors import register_exception_handlers
 from app.engines.factory import ProviderFactory
 from app.forensics.tools import detect_capabilities
 from app.services.fact_checker import FactCheckService
+from app.services.media_checker import MediaCheckService
 
 #: Citizen web app (static HTML/CSS/JS, no build step) served at ``/``.
 WEB_DIR = Path(__file__).parent / "web"
@@ -115,6 +116,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.fact_check_service = FactCheckService(
             connectors, max_results_per_connector=settings.connector_max_results
         )
+        app.state.media_check_service = MediaCheckService(settings, app.state.fact_check_service)
         warm_task = asyncio.create_task(warm_up(connectors)) if settings.connector_warm_up else None
         # Logs which media tools exist (FFmpeg, ExifTool, C2PA...) without delaying startup.
         tools_task = asyncio.create_task(asyncio.to_thread(detect_capabilities))

@@ -14,6 +14,7 @@ from app.core.errors import ProviderConfigurationError
 from app.engines.base import BaseLLMProvider
 from app.engines.factory import ProviderFactory
 from app.services.fact_checker import FactCheckService
+from app.services.media_checker import MediaCheckService
 
 # The BYOK headers are declared as security schemes so Swagger UI shows a single "Authorize"
 # dialog: users fill them once and every "Try it out" request carries them.
@@ -53,6 +54,10 @@ def get_provider_factory(request: Request) -> ProviderFactory:
 
 def get_fact_check_service(request: Request) -> FactCheckService:
     return request.app.state.fact_check_service
+
+
+def get_media_check_service(request: Request) -> MediaCheckService:
+    return request.app.state.media_check_service
 
 
 @dataclass

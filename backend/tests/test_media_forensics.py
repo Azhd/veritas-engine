@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
@@ -47,6 +48,8 @@ from app.schemas.forensics import (
     Transcript,
     TranscriptSegment,
 )
+from app.services.fact_checker import FactCheckService
+from app.services.media_checker import MediaCheckService
 from tests.conftest import FakeLLMProvider, fake_credentials, make_settings
 
 
@@ -526,3 +529,119 @@ async def test_timed_claims_with_ai_and_heuristic_fallback():
     assert claims[0].claim == "A inflação no Brasil passou de 10% em 2026."
     assert "[83.0s] A inflação" in llm.calls[0]["prompt"]
     assert await extract_timed_claims(Transcript(engine="t"), llm) == []
+
+
+# =============================================================== 3.5 POST /api/v1/fact-check/media
+MEDIA_ENDPOINT = "/api/v1/fact-check/media"
+
+
+class _StubTranscriber:
+    engine = "stub"
+
+    async def transcribe(self, audio, duration):
+        return Transcript(
+            engine="groq_whisper",
+            segments=[
+                TranscriptSegment(start_time=0, end_time=3, text="Olá, pessoal."),
+                TranscriptSegment(
+                    start_time=83, end_time=90, text="A inflação do Brasil passou de 10% este ano."
+                ),
+            ],
+        )
+
+
+@pytest.fixture
+def media_client(monkeypatch):
+    """App whose media pipeline uses fake FFmpeg/C2PA availability and no network sources."""
+    settings = make_settings(media_keyframes=2, media_max_bytes=1024 * 1024)
+    caps = _caps(ffmpeg=True, pillow=True, **{"yt-dlp": True})
+    monkeypatch.setattr("app.services.media_checker.detect_capabilities", caps)
+    monkeypatch.setattr(tools, "ffmpeg_path", lambda: "ffmpeg")
+    app = create_app(settings)
+    with TestClient(app) as client:
+        fact_checker = FactCheckService([])  # no connectors: no network
+        inspector = MediaInspector(
+            settings, capabilities=caps, run=_FakeFfmpeg(duration="00:01:40.00")
+        )
+        app.state.media_check_service = MediaCheckService(settings, fact_checker, inspector)
+        yield client
+
+
+def _jpeg_bytes() -> bytes:
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (40, 30), (10, 20, 30)).save(buffer, format="JPEG")
+    return buffer.getvalue()
+
+
+def test_media_route_image_without_ai(media_client):
+    response = media_client.post(
+        MEDIA_ENDPOINT,
+        files={"file": ("foto.jpg", _jpeg_bytes(), "image/jpeg")},
+        data={"claim": "A foto mostra a enchente de ontem em Porto Alegre."},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["forensics"]["kind"] == "image"
+    assert body["forensics"]["exif"]["width"] == 40
+    assert len(body["forensics"]["sha256"]) == 64
+    assert [c["label"] for c in body["checks"]] == ["Texto informado"]
+    assert body["checks"][0]["report"]["verdict"] == "SEM_CHAVE_IA_DADOS_BRUTOS"
+    assert body["ai_used"] is False and body["provider"] == "nenhum"
+
+
+def test_media_route_video_timeline_with_minute_marks(media_client, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.media_checker.build_transcriber", lambda *a, **k: _StubTranscriber()
+    )
+    response = media_client.post(
+        MEDIA_ENDPOINT,
+        files={"file": ("video.mp4", b"\0\0\0\x20ftypisom" + b"v" * 400, "video/mp4")},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    forensics = body["forensics"]
+    assert forensics["kind"] == "video"
+    assert forensics["exif"]["duration_seconds"] == 100.0
+    assert len(forensics["keyframes"]) == 2
+    assert forensics["transcript"]["engine"] == "groq_whisper"
+    timeline = [(c["label"], c["start_time"], c["quote"]) for c in body["checks"]]
+    assert timeline == [("01:23", 83.0, "A inflação do Brasil passou de 10% este ano.")]
+
+
+def test_media_route_without_transcription_engine_explains_how(media_client):
+    response = media_client.post(
+        MEDIA_ENDPOINT, files={"file": ("a.mp4", b"\0\0\0\x20ftypisom" + b"v" * 64, "video/mp4")}
+    )
+    body = response.json()
+    assert body["checks"] == []
+    assert any("Groq" in note and "Gemini" in note for note in body["notes"])
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "status", "code"),
+    [
+        ({"data": {}}, 400, "media_error"),
+        ({"data": {"url": "http://127.0.0.1:8000/admin.mp4"}}, 400, "unsafe_url"),
+        (
+            {
+                "files": {
+                    "file": ("big.jpg", b"\xff\xd8\xff" + b"x" * (2 * 1024 * 1024), "image/jpeg")
+                }
+            },
+            413,
+            "media_too_large",
+        ),
+    ],
+)
+def test_media_route_errors(media_client, kwargs, status, code):
+    response = media_client.post(MEDIA_ENDPOINT, **kwargs)
+    assert response.status_code == status
+    assert response.json()["error"]["code"] == code
+
+
+def test_media_route_is_documented(media_client):
+    paths = media_client.get("/openapi.json").json()["paths"]
+    assert MEDIA_ENDPOINT in paths
+    assert "/api/v1/media/capabilities" in paths

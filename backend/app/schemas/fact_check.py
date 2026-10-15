@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.evidence import Country, Domain
+from app.schemas.forensics import MediaForensicsReport
 
 
 class Verdict(StrEnum):
@@ -233,3 +234,25 @@ class FactCheckReport(BaseModel):
 
     def model_post_init(self, __context: Any) -> None:
         self.confidence_score = round(self.confidence_score, 3)
+
+
+# ---------------------------------------------------------------- media (Phase 3)
+class TimedCheck(BaseModel):
+    """A claim found in the media, where it was said, and its fact-check."""
+
+    start_time: float | None = Field(
+        default=None, description="Seconds into the media; None for the text sent by the user."
+    )
+    label: str = Field(description="'01:23' or 'Texto informado'.")
+    quote: str = ""
+    report: FactCheckReport
+
+
+class MediaFactCheckReport(BaseModel):
+    forensics: MediaForensicsReport
+    checks: list[TimedCheck] = Field(default_factory=list)
+    ai_used: bool
+    provider: str
+    model: str
+    notes: list[str] = Field(default_factory=list)
+    checked_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
